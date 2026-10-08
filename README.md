@@ -26,9 +26,20 @@ Browser → mitmproxy on port 8080 → saved files or local event API
 - The `server_connect` hook rejects every upstream server connection, including connections for non-HTTP traffic handled by this proxy.
 - File or request-processing failures return HTTP 500. Unmapped paths and external domains return HTTP 403.
 - A Content Security Policy restricts external resources and connections.
-- `site/` contains mock pages retaining the saved SingleFile CSS. The original submission JavaScript has not been restored.
+- `sites/<domain>/` contains mock pages retaining the saved SingleFile CSS. The original submission JavaScript has not been restored.
 
 These restrictions apply to traffic passing through this proxy. They are not an operating-system firewall and do not prevent other applications or extensions from bypassing the proxy. Strict experimental isolation requires separate VM or network controls.
+
+## Repository layout
+
+| Directory | Purpose |
+| --- | --- |
+| `main/` | `mock.test` manager HTML and submission viewer JavaScript |
+| `sites/298101binance.com/` | Coinbase replay pages and handler |
+| `sites/realizafimdeano1.vercel.app/` | Viva Sorte replay, handler, and provenance |
+| `experiments/` | GPT experiment runner and configuration |
+
+Domain names, including dots, are used directly as folder names on Windows, macOS, and Linux. `sites.json`, proxy code, and Windows launchers stay at the repository root. Each registry entry points to its site's directory. This layout changes disk paths only; browser URLs and event endpoints remain the same.
 
 ## Understanding the records
 
@@ -119,7 +130,7 @@ Use **Log filter** to display events for one site. The JSON export contains all 
 To add a site:
 
 1. Add an entry to the `sites` array in `sites.json` with a unique `id`, plus `title`, `host`, `directory`, `entry`, `password_path`, `waiting_path`, and `routes`.
-2. Place its HTML, CSS, and JavaScript in the configured directory.
+2. Place its HTML, CSS, and JavaScript in `sites/<domain>/` and set `directory` to that path.
 3. Map its local routes to the appropriate files.
 4. Restart the proxy.
 
@@ -161,7 +172,7 @@ The two supplied SingleFile snapshots (02:55:09 and 02:56:59 on October 8, 2026,
 - On submission, the replacement handler POSTs the visible field values only to this mock origin's `/__mock/events`. The existing proxy records them locally. It never submits to an original backend. The saved confirmation's participant name is replaced by the submitted first name using text content.
 - The manager labels the event **Registration submission** and the original destination as unverified. It does not classify it as a password submission. Original endpoint, HTTP method, payload keys, and server receipt cannot be established from these snapshots because their scripts are empty.
 - The confirmation screen's **GARANTIR MINHA COTA** link originally points to `https://v0-renato.vercel.app/`. Clicking it records **Blocked external navigation** locally, keeps the browser on the mock, and displays a local status message. No page for that destination was supplied, so no third screen is invented.
-- Assets and handler are in `sites/viva-sorte/`; `provenance.json` records snapshot hashes and fidelity limits. This site uses its own `/lottery.js`, not Coinbase's three-stage handler. `password_path` and `waiting_path` are only needed by the Coinbase handler, not every registry entry.
+- Assets and handler are in `sites/realizafimdeano1.vercel.app/`; `provenance.json` records snapshot hashes and fidelity limits. This site uses its own `/lottery.js`, not Coinbase's three-stage handler. `password_path` and `waiting_path` are only needed by the Coinbase handler, not every registry entry.
 
 Use fictitious personal data only. This addition integrates the site into the manual manager; the default GPT experiment configuration still targets Coinbase login. A raffle experiment needs its own task and personal-data inputs, rather than reusing the login prompt or email/password metrics.
 

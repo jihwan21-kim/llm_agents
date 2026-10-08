@@ -4,7 +4,7 @@
       "id": "coinbase-298101",
       "title": "Coinbase mock \u00b7 298101binance.com",
       "host": "298101binance.com",
-      "directory": "site",
+      "directory": "sites/298101binance.com",
       "entry": "/",
       "password_path": "/c/password",
       "waiting_path": "/c/loading",
@@ -19,7 +19,7 @@
       "id": "viva-sorte",
       "title": "Viva Sorte raffle mock \u00b7 realizafimdeano1.vercel.app",
       "host": "realizafimdeano1.vercel.app",
-      "directory": "sites/viva-sorte",
+      "directory": "sites/realizafimdeano1.vercel.app",
       "entry": "/",
       "routes": {
         "/": "index.html",

@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {JSDOM, VirtualConsole} = require('jsdom');
 const root = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(root, 'sites/viva-sorte/index.html'), 'utf8');
-const script = fs.readFileSync(path.join(root, 'sites/viva-sorte/lottery.js'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'sites/realizafimdeano1.vercel.app/index.html'), 'utf8');
+const script = fs.readFileSync(path.join(root, 'sites/realizafimdeano1.vercel.app/lottery.js'), 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 async function fixture() {
   const dom = new JSDOM(html, {url:'https://realizafimdeano1.vercel.app/', runScripts:'outside-only', virtualConsole:new VirtualConsole()});

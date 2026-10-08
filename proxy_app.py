@@ -6,7 +6,6 @@ from mitmproxy import http
 ROOT=Path(__file__).resolve().parent
 HOST='mock.test'
 SITES={s['host']:s for s in json.loads((ROOT/'sites.json').read_text(encoding='utf-8'))['sites']}
-FILES={'/':'index.html','/agent.html':'agent.html','/password.html':'password.html','/after.html':'after.html','/mock.js':'mock.js','/observer.js':'observer.js'}
 class MockProxy:
  def __init__(self):
   self.events=[]
@@ -52,7 +51,7 @@ class MockProxy:
   if q.method=='GET' and path in mapping:
    self.record_request(flow,'local_file')
    name=mapping[path]
-   folder=(ROOT/('site' if q.host==HOST else SITES[q.host]['directory'])).resolve()
+   folder=(ROOT/('main' if q.host==HOST else SITES[q.host]['directory'])).resolve()
    file=(folder/name).resolve()
    if not file.is_relative_to(ROOT.resolve()):return self.reply(flow,403)
    body=file.read_bytes()
