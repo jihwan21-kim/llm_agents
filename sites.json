@@ -2,7 +2,7 @@
   "sites": [
     {
       "id": "coinbase-298101",
-      "title": "Coinbase 화면 · 298101binance.com",
+      "title": "Coinbase mock · 298101binance.com",
       "host": "298101binance.com",
       "directory": "site",
       "entry": "/",
