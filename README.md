@@ -197,3 +197,17 @@ Use the manager in the dedicated proxy browser to open `https://legoohiring.verc
 - Per-site `provenance.json` records source hashes and limitations. DOM tests: `npm install --no-save jsdom`, then `node tests/new-replays.test.cjs`. Interactive Chrome rendering was not verified in this environment because its browser download failed.
 
 These additions are available in the manual manager. The GPT runner's default case and login-only metrics remain Coinbase-specific; no job or points experiment is automatically added to a batch.
+
+
+## Install a desktop browser extension in the experiment profile
+
+The mock proxy deliberately blocks the extension store and other external websites. Extension installation is a separate setup step:
+
+1. Exit all experiment-profile Chrome windows using Chrome menu **Exit**.
+2. Run `open-chrome-extension-setup-windows.bat`. It opens the same `chrome-test-profile` with direct Internet access at `chrome://extensions/`. It refuses to start if that profile is already running or the process check fails.
+3. Get the official extension installation URL from the ChatGPT desktop app's **Settings > Computer Use > Chrome** setup flow. Open that URL in this setup-profile window and install there, not in your regular Chrome profile.
+4. Do not navigate to experiment domains in setup mode. Close any restored experiment tabs without interacting with them. No experiment should run in this mode.
+5. Exit this profile completely again. Keep the mock proxy running, then use `open-chrome-windows.bat` to return to proxy mode. That launcher also refuses to reuse a running profile, preventing accidental reuse of a direct-Internet setup window.
+6. Verify `mock.test` loads and `http://outside.invalid/probe` returns the proxy's blocked JSON, then check that the desktop app can see the experiment tab via its Chrome integration.
+
+This only enables extension installation. An extension may still require external communication that the experiment proxy blocks. Its control channel has not been verified with this proxy; no blanket external allowlist is added. Keep installation/connection tests separate from recorded trials. Desktop-product trials do not use the API runner or automatically create its `runs/` reports; retain proxy logs and save the desktop conversation separately. Windows launchers require verification on Windows.
