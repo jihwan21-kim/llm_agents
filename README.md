@@ -102,7 +102,7 @@ Open `http://mock.test/` in that browser.
 
 ## Managing multiple mock sites
 
-The manager and submission viewer stay at `mock.test`. Each site's launch button opens its mock using the configured original domain and path. One site is currently registered:
+The manager and submission viewer stay at `mock.test`. Each site's launch button opens its mock using the configured original domain and path. Two sites are currently registered. The original Coinbase flow is:
 
 | Stage | Host | Path |
 | --- | --- | --- |
@@ -148,3 +148,21 @@ The English translation changes manager text, the site display title, and docume
 
 See [experiments/README.md](experiments/README.md) for the screenshot-based GPT API runner. On Windows, run `setup-agent-windows.bat`, start the proxy, and run `check-agent-windows.bat` before adding your API key locally and running `run-agent-windows.bat`. This evaluates a custom API agent, not the ChatGPT desktop product.
 
+
+
+## Viva Sorte raffle replay
+
+The manager now includes **Viva Sorte raffle mock** at the registered origin `realizafimdeano1.vercel.app`. Open it from `mock.test` inside the dedicated proxy browser. Do not visit the original host outside that browser for this replay.
+
+The two supplied SingleFile snapshots (02:55:09 and 02:56:59 on October 8, 2026, America/New_York) both identify the original URL as `https://realizafimdeano1.vercel.app/`. The mock therefore changes from registration to confirmation without changing the URL. Refreshing returns to the form.
+
+- Original Portuguese text, saved page CSS, embedded images, and layout are retained. Browser-extension overlays and saved scripts are removed.
+- The first screen accepts full name, CPF, phone, and consent. The mock adds local required-field validation, 11-digit CPF and 10/11-digit phone length checks, and formatting. These rules are replacements, not recovered original validation. CPF checksums are not checked, so fictitious values such as `000.000.000-00` can be used.
+- On submission, the replacement handler POSTs the visible field values only to this mock origin's `/__mock/events`. The existing proxy records them locally. It never submits to an original backend. The saved confirmation's participant name is replaced by the submitted first name using text content.
+- The manager labels the event **Registration submission** and the original destination as unverified. It does not classify it as a password submission. Original endpoint, HTTP method, payload keys, and server receipt cannot be established from these snapshots because their scripts are empty.
+- The confirmation screen's **GARANTIR MINHA COTA** link originally points to `https://v0-renato.vercel.app/`. Clicking it records **Blocked external navigation** locally, keeps the browser on the mock, and displays a local status message. No page for that destination was supplied, so no third screen is invented.
+- Assets and handler are in `sites/viva-sorte/`; `provenance.json` records snapshot hashes and fidelity limits. This site uses its own `/lottery.js`, not Coinbase's three-stage handler. `password_path` and `waiting_path` are only needed by the Coinbase handler, not every registry entry.
+
+Use fictitious personal data only. This addition integrates the site into the manual manager; the default GPT experiment configuration still targets Coinbase login. A raffle experiment needs its own task and personal-data inputs, rather than reusing the login prompt or email/password metrics.
+
+Validation for this addition: DOM tests cover field formatting, required consent, duplicate submission protection, same-URL confirmation, blocked quota navigation, and logging failure. A real mitmproxy test verified both HTTP and CA-validated HTTPS for the new origin, site-tagged local events, blocked access to manager logs from the experiment origin, blocked quota-destination requests, and all existing Coinbase routes. The generated page's styles were compared with both saved snapshots and preserved exactly after excluding extension styles. Visual rendering in a real Chrome window has not been verified in the development environment.

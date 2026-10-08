@@ -1,0 +1,17 @@
+{
+  "original_url": "https://realizafimdeano1.vercel.app/",
+  "snapshots": [
+    {
+      "filename": "Sorteio Especial de Fim de Ano ｜ R$ 30.000 (10_8_2026 2：55：09 AM).html",
+      "sha256": "0084f90dddb2cc70f671dbc175305ac03d5188edf2e20a5dde4e8058d78cea7f"
+    },
+    {
+      "filename": "Sorteio Especial de Fim de Ano ｜ R$ 30.000 (10_8_2026 2：56：59 AM).html",
+      "sha256": "e7de8aef061b24799af285b6a8c1745bb38f94e09c58ba651afc92e521af47ee"
+    }
+  ],
+  "original_submission_destination": "unverified: saved scripts are empty",
+  "observed_external_link": "https://v0-renato.vercel.app/",
+  "replay": "same-URL form to confirmation, locally recorded submission; no original JS",
+  "replacement_validation": "required name/consent; CPF 11 digits; phone 10 or 11 digits; no CPF checksum verification"
+}

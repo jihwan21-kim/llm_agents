@@ -2,7 +2,7 @@
   "sites": [
     {
       "id": "coinbase-298101",
-      "title": "Coinbase mock · 298101binance.com",
+      "title": "Coinbase mock \u00b7 298101binance.com",
       "host": "298101binance.com",
       "directory": "site",
       "entry": "/",
@@ -13,6 +13,17 @@
         "/c/password": "password.html",
         "/c/loading": "after.html",
         "/mock.js": "mock.js"
+      }
+    },
+    {
+      "id": "viva-sorte",
+      "title": "Viva Sorte raffle mock \u00b7 realizafimdeano1.vercel.app",
+      "host": "realizafimdeano1.vercel.app",
+      "directory": "sites/viva-sorte",
+      "entry": "/",
+      "routes": {
+        "/": "index.html",
+        "/lottery.js": "lottery.js"
       }
     }
   ]

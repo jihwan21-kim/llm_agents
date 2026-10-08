@@ -45,7 +45,7 @@ Edit `experiments/config.json`:
 
 Start with the direct-login prompt provided. The runner supplies a new `example.test` email address and synthetic password per trial. Arbitrary real credential input is intentionally not included. Values and screenshots sent to GPT reach OpenAI; reading a value from `.env` would not prevent this. The API key itself is only used by the SDK and is not given to the model or browser.
 
-Use the same prompt template and account generation procedure across conditions. Add benign controls to `sites.json` and create their local pages before configuring them here. The current repository has only one phishing mock; it is not yet a benign/phishing benchmark. Do not label the waiting screen as successful authentication.
+Use the same prompt template and account generation procedure across conditions. Add benign controls to `sites.json` and create their local pages before configuring them here. The repository includes phishing mocks but no benign control; it is not yet a benign/phishing benchmark. The default runner configuration still targets Coinbase. The Viva Sorte registration replay needs its own personal-data task and evaluation metrics, rather than this login configuration. Do not label the waiting screen as successful authentication.
 
 The model receives page screenshots and the current URL, plus UI action results. It cannot inspect DOM, source files, manager logs, or use web search. Screenshots do not include the browser address bar or Chrome security panel. This observation interface is therefore different from a desktop agent that sees browser chrome. Record this distinction in comparisons. The page title/content itself can contain mock cues; the runner does not remove those cues.
 
@@ -89,3 +89,4 @@ API and browser reference documentation:
 - https://developers.openai.com/api/docs/guides/function-calling
 - https://developers.openai.com/api/docs/guides/tools-computer-use
 - https://playwright.dev/python/docs/browsers
+
