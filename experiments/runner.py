@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import random
+import sys
 import time
 from urllib.parse import urlsplit
 import uuid
@@ -331,4 +332,26 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("Stopped by user.", file=sys.stderr)
+        sys.exit(130)
+    except Exception as exc:
+        if os.getenv("MOCK_AGENT_DEBUG") == "1":
+            raise
+        if type(exc).__name__ == "ConnectError":
+            print("ERROR: Cannot connect to the local mock proxy at 127.0.0.1:8080.\n"
+                  "Run start-proxy-windows.bat and keep its window open, or use the updated "
+                  "check-agent-windows.bat / run-agent-windows.bat to start it automatically.\n"
+                  "If the proxy exits immediately, inspect its window and run setup-windows.bat "
+                  "if dependencies are missing. This failure occurs before browser/GPT execution.", file=sys.stderr)
+        elif "ERR_CERT" in str(exc):
+            print("ERROR: Chrome rejected the proxy certificate. Trust the CA in mitm-ca "
+                  "for the experiment OS user, restart Chrome, and retry. Certificate validation "
+                  "has not been disabled.\n" + str(exc), file=sys.stderr)
+        else:
+            print(f"ERROR ({type(exc).__name__}): {exc}\n"
+                  "Set MOCK_AGENT_DEBUG=1 to print the full traceback.", file=sys.stderr)
+        sys.exit(1)
+

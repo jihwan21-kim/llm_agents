@@ -5,8 +5,8 @@ This is a custom GPT API agent, not the ChatGPT desktop product. It uses the Res
 ## Windows: first run
 
 1. Pull the repository update and run `setup-agent-windows.bat` once. Python 3.12+ and installed Google Chrome are required. Dependencies go into `.venv-agent`, separate from the proxy environment.
-2. Start the existing proxy with `start-proxy-windows.bat` and leave it running.
-3. Run `check-agent-windows.bat`. This makes no GPT calls and requires no API key. It checks the proxy marker, a blocked `.invalid` destination, registered targets, browser startup, and HTTPS certificate validation.
+2. Ensure the proxy dependencies were installed with `setup-windows.bat` (this is separate from `setup-agent-windows.bat`). You may start `start-proxy-windows.bat` manually, or let the next step start it automatically.
+3. Run `check-agent-windows.bat`. It verifies an existing local proxy or starts one in a separate console and waits up to 20 seconds for readiness. Keep the proxy console open. This makes no GPT calls and requires no API key. It checks the proxy marker, a blocked `.invalid` destination, registered targets, browser startup, and HTTPS certificate validation.
 4. Copy `.env.example` to `.env` in the repository root. Set `OPENAI_API_KEY` locally. Optionally set `OPENAI_MODEL` to a model you can access that supports image input and Responses function calling. The example uses `gpt-5.4`; availability must be checked on your API account.
 5. Run `run-agent-windows.bat` for one trial. API usage may incur charges. After inspecting the result, use `run-agent-windows.bat --repeats 10` for ten trials per configured case.
 
@@ -80,7 +80,7 @@ Dependencies are range-constrained; actual installed versions are captured in ea
 
 ## Verification
 
-The five included standard-library tests check origin restrictions, configuration validation, separation of local receipt from submission intent, and the agent loop with fake browser/API objects (including stopping for user input and excluding another trial's events). Run `python -m unittest discover -s experiments -p "test_*.py"` from the repository root. `check` adds real proxy/browser checks on your machine. Neither is a paid model trial.
+The included standard-library tests check origin restrictions, configuration validation, separation of local receipt from submission intent, and the agent loop with fake browser/API objects (including stopping for user input and excluding another trial's events). Run `python -m unittest discover -s experiments -p "test_*.py"` from the repository root. `check` adds real proxy/browser checks on your machine. Neither is a paid model trial.
 
 Implementation validation passed the five tests, real mitmproxy preflight, and an installed OpenAI SDK request/response check using a mock HTTP transport. Browser installation failed in the development environment, so real Chrome UI execution and live GPT calls have not been verified there. Run `check` and inspect one live trial on your machine before a batch.
 
@@ -90,3 +90,16 @@ API and browser reference documentation:
 - https://developers.openai.com/api/docs/guides/tools-computer-use
 - https://playwright.dev/python/docs/browsers
 
+
+
+## Connection refused / WinError 10061
+
+This error during `preflight` means the runner could not establish a TCP connection to the local proxy on `127.0.0.1:8080`. It occurs before Chrome or GPT is used and is not an HTTPS certificate failure. Common causes are a stopped proxy or a proxy process that failed during startup.
+
+The Windows check/run launchers now invoke `experiments/ensure_proxy.py` first. It verifies the local proxy response and site registry, reuses a healthy proxy, and starts the project's proxy if the port refuses connections. It will not stop or replace another service using port 8080. If `.venv` is missing, run `setup-windows.bat`; `.venv-agent` alone is not enough. If startup fails, inspect the separate proxy window. The proxy launcher keeps startup errors visible.
+
+Direct `python experiments/runner.py check` or `run` calls still expect an already running proxy. You can invoke `python experiments/ensure_proxy.py` first. On macOS/Linux this helper starts the proxy as a detached process with output in `logs/proxy-startup.log`; stop that process explicitly when finished. When source files or `sites.json` change, restart an already running proxy to load the update.
+
+The runner now prints an actionable connection/certificate error instead of a full traceback by default. Set `MOCK_AGENT_DEBUG=1` for the traceback. Browser or API work does not proceed if the proxy readiness check fails.
+
+Startup validation: unit tests cover healthy-proxy reuse, absent-proxy startup, wrong-service rejection, early exit, and missing environment. A Linux integration check also exercised actual mitmproxy startup and reuse. The Windows console-launch behavior still needs verification on Windows.

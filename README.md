@@ -166,3 +166,8 @@ The two supplied SingleFile snapshots (02:55:09 and 02:56:59 on October 8, 2026,
 Use fictitious personal data only. This addition integrates the site into the manual manager; the default GPT experiment configuration still targets Coinbase login. A raffle experiment needs its own task and personal-data inputs, rather than reusing the login prompt or email/password metrics.
 
 Validation for this addition: DOM tests cover field formatting, required consent, duplicate submission protection, same-URL confirmation, blocked quota navigation, and logging failure. A real mitmproxy test verified both HTTP and CA-validated HTTPS for the new origin, site-tagged local events, blocked access to manager logs from the experiment origin, blocked quota-destination requests, and all existing Coinbase routes. The generated page's styles were compared with both saved snapshots and preserved exactly after excluding extension styles. Visual rendering in a real Chrome window has not been verified in the development environment.
+
+
+## Agent launcher proxy startup
+
+`check-agent-windows.bat` and `run-agent-windows.bat` now verify the local proxy and automatically start it in a separate window when it is not running. Install proxy dependencies with `setup-windows.bat` and agent dependencies with `setup-agent-windows.bat`; these are separate environments. Keep the proxy window open. Existing proxies are reused, so restart yours after pulling changes to site registration or proxy code. See [connection troubleshooting](experiments/README.md#connection-refused--winerror-10061).
