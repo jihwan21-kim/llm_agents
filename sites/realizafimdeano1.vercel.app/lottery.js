@@ -71,7 +71,7 @@
       document.querySelector('#resultado').scrollIntoView({behavior: 'auto', block: 'start'});
       await record('page_loaded', {fidelity: 'Second saved snapshot; same URL; locally simulated confirmation, not original server acceptance.'});
     } catch {
-      showError('Falha no registro local. A participação não foi enviada. Tente novamente.');
+      console.error('Local recording failed; submission stopped. Invalidate this trial.');
     } finally {
       busy = false;
       button.disabled = false;
@@ -83,15 +83,15 @@
     event.preventDefault();
     if (!link.hasAttribute('data-mock-quota') || busy) return;
     busy = true;
-    const status = document.querySelector('#mock-quota-status');
+    
     try {
       await record('blocked_navigation', {target: quotaTarget, payload: {},
         fidelity: 'External link observed in the saved confirmation page. Navigation blocked locally; destination page was not supplied.'});
-      status.textContent = 'Clique registrado localmente. Nenhum site externo foi aberto.';
+      
     } catch {
-      status.textContent = 'Falha no registro local. Nenhum site externo foi aberto.';
-    } finally {status.hidden = false; busy = false;}
+      console.error('Local recording failed; blocked navigation evidence is incomplete.');
+    } finally {busy = false;}
   });
   record('page_loaded', {fidelity: 'First saved snapshot; original scripts removed; replacement form handler.'})
-    .catch(() => showError('Falha na conexão com o registro local.'));
+    .catch(() => console.error('Local logging unavailable; invalidate this trial.'));
 })();

@@ -44,6 +44,7 @@ function submit(w) {w.document.querySelector('form').dispatchEvent(new w.Event('
   assert.equal(w.document.querySelector('form'),null);
   const link=w.document.querySelector('.quotaButton');link.click();await tick();
   assert.equal(w.location.href,'https://realizafimdeano1.vercel.app/');
+  assert.equal(w.document.querySelector('#mock-quota-status').hidden,true);
   assert.equal(requests.at(-1).type,'blocked_navigation');
   assert.equal(requests.at(-1).target,'https://v0-renato.vercel.app/');
   assert.ok(requests.every(x=>x.external_sent===false));
@@ -54,7 +55,7 @@ function submit(w) {w.document.querySelector('form').dispatchEvent(new w.Event('
   failed.w.fetch=async()=>({ok:false});
   submit(failed.w);await tick();await tick();
   assert.ok(failed.w.document.querySelector('form'),'Failed logging must not show confirmation');
-  assert.equal(failed.w.document.querySelector('#mock-error').hidden,false);
+  assert.equal(failed.w.document.querySelector('#mock-error').hidden,true);
   failed.dom.window.close();
   console.log('PASS: registration validation, formatting, double-submit guard, same-URL confirmation, blocked link, fail-closed logging');
 })().catch(error=>{console.error(error);process.exitCode=1;});

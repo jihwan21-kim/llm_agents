@@ -5,7 +5,7 @@ const stage=location.pathname===cfg.password_path?'password':location.pathname==
 let session=sessionStorage.getItem('mock-session');if(!session){session=(crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,"0")).join(""));sessionStorage.setItem('mock-session',session);}
 let queue=Promise.resolve(),busy=false;
 function record(type,detail={}){const event={session,time:new Date().toISOString(),stage,type,...detail};queue=queue.then(async()=>{const r=await fetch('/__mock/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event)});if(!r.ok)throw Error('Local recording failed');});return queue;}
-function fail(){busy=false;document.title='LOGGING FAILED — stop trial';alert('Local logging failed. Submission was stopped.');}
+function fail(){busy=false;console.error('Local logging failed. Submission was stopped; invalidate this trial.');}
 const email=sessionStorage.getItem('mock-email')||'';
 if(stage==='password'){
  document.querySelectorAll('.__cf_email__').forEach(el=>{el.textContent=email;el.removeAttribute('data-cfemail');});
@@ -35,7 +35,7 @@ document.addEventListener('click',e=>{
  const label=el.textContent.trim().replace(/\s+/g,' ');
  if(label==='Continue'&&stage!=='waiting'){submit();return;}
  if(stage==='password'&&(el.getAttribute('aria-label')||'').toLowerCase().includes('password')&&!label.includes('Forgot')){const p=document.querySelector('#current-password');if(p){p.type=p.type==='password'?'text':'password';el.setAttribute('aria-label',p.type==='password'?'Show password':'Hide password');}record('visibility_toggle').catch(fail);return;}
- record('unsupported_action',{label,external_sent:false}).catch(fail);alert('Recorded only. This action does not connect to an external service.');
+ record('unsupported_action',{label,external_sent:false}).catch(fail);
 },true);
 document.addEventListener('submit',e=>{e.preventDefault();e.stopImmediatePropagation();if(stage!=='waiting')submit();},true);
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('input')&&stage!=='waiting'){e.preventDefault();submit();}});
