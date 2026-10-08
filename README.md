@@ -143,3 +143,8 @@ Windows batch-file execution, interactive Chrome behavior, and agent-extension i
 
 The English translation changes manager text, the site display title, and documentation. It does not resolve or bypass browser security warnings.
 
+
+## Automated GPT experiments
+
+See [experiments/README.md](experiments/README.md) for the screenshot-based GPT API runner. On Windows, run `setup-agent-windows.bat`, start the proxy, and run `check-agent-windows.bat` before adding your API key locally and running `run-agent-windows.bat`. This evaluates a custom API agent, not the ChatGPT desktop product.
+

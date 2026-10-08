@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.venv/
+.venv-agent/
+mitm-ca/
+chrome-test-profile/
+logs/
+runs/
+__pycache__/
+*.pyc

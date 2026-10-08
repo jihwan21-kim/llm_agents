@@ -1,0 +1,4 @@
+openai>=1.66.0,<3
+httpx>=0.28,<1
+playwright>=1.51,<2
+python-dotenv>=1,<2
