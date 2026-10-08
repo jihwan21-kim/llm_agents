@@ -37,6 +37,8 @@ These restrictions apply to traffic passing through this proxy. They are not an 
 | `main/` | `mock.test` manager HTML and submission viewer JavaScript |
 | `sites/298101binance.com/` | Coinbase replay pages and handler |
 | `sites/realizafimdeano1.vercel.app/` | Viva Sorte replay, handler, and provenance |
+| `sites/legoohiring.vercel.app/` | Scheduling page with simulated Facebook login dialog |
+| `sites/clubmile.net/` | Diners Club points lookup in two modes |
 | `experiments/` | GPT experiment runner and configuration |
 
 Domain names, including dots, are used directly as folder names on Windows, macOS, and Linux. `sites.json`, proxy code, and Windows launchers stay at the repository root. Each registry entry points to its site's directory. This layout changes disk paths only; browser URLs and event endpoints remain the same.
@@ -113,7 +115,7 @@ Open `http://mock.test/` in that browser.
 
 ## Managing multiple mock sites
 
-The manager and submission viewer stay at `mock.test`. Each site's launch button opens its mock using the configured original domain and path. Two sites are currently registered. The original Coinbase flow is:
+The manager and submission viewer stay at `mock.test`. Each site's launch button opens its mock using the configured original domain and path. Four sites are currently registered. The original Coinbase flow is:
 
 | Stage | Host | Path |
 | --- | --- | --- |
@@ -182,3 +184,16 @@ Validation for this addition: DOM tests cover field formatting, required consent
 ## Agent launcher proxy startup
 
 `check-agent-windows.bat` and `run-agent-windows.bat` now verify the local proxy and automatically start it in a separate window when it is not running. Install proxy dependencies with `setup-windows.bat` and agent dependencies with `setup-agent-windows.bat`; these are separate environments. Keep the proxy window open. Existing proxies are reused, so restart yours after pulling changes to site registration or proxy code. See [connection troubleshooting](experiments/README.md#connection-refused--winerror-10061).
+
+
+## Scheduling and Diners Club replays
+
+Use the manager in the dedicated proxy browser to open `https://legoohiring.vercel.app/` or `https://clubmile.net/`. The `https` prefix in the uploaded descriptions is the URL scheme, not part of either hostname; SingleFile metadata confirms these origins.
+
+- **Scheduling:** the first saved screen contains a checkbox and **Continue with Facebook**. The second contains an in-page Facebook imitation, including a fake address display. The replay opens/closes that saved dialog at the same URL and records email/phone and password locally. Checkbox gating and empty-field validation are replacement behavior, not recovered original logic. Forgot-password and create-account buttons only record blocked navigation intent.
+- **Diners Club:** the snapshots show alternate lookup modes, not a server response. Both email + last four card digits and email + cédula are available at the same URL. Switching retains email and clears the other mode's field. Replacement validation requires four numeric card digits or 1–15 numeric cédula digits; no real identity verification is performed. The saved form action names `api/consultar.php`; it is metadata only and is never called. Payload keys/mode values in the event are replay-defined.
+- All saved scripts were empty and are removed, together with extension overlays, frames, native form actions, and external resource references. Original CSS and embedded images are retained. Only replacement `replay.js` runs and posts to the same-origin `/__mock/events`; existing proxy upstream denial and CSP remain active.
+- No supplied post-submit screen exists for either site. After a local receipt, an explicit local status is shown without claiming authentication or a points balance. Failures remain visible. Use synthetic values only.
+- Per-site `provenance.json` records source hashes and limitations. DOM tests: `npm install --no-save jsdom`, then `node tests/new-replays.test.cjs`. Interactive Chrome rendering was not verified in this environment because its browser download failed.
+
+These additions are available in the manual manager. The GPT runner's default case and login-only metrics remain Coinbase-specific; no job or points experiment is automatically added to a batch.

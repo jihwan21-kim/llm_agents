@@ -1,0 +1,21 @@
+{
+  "original_url": "https://clubmile.net/",
+  "snapshots": [
+    {
+      "filename": "Consulta de Puntos - Diners Club (10_8_2026 3\uff1a09\uff1a20 AM)(1).html",
+      "sha256": "caf04d0e5554baf10c683cb39a19ddcecf39fee0976151cc2eca335e9c658dc4"
+    },
+    {
+      "filename": "Consulta de Puntos - Diners Club (10_8_2026 3\uff1a09\uff1a27 AM)(1).html",
+      "sha256": "71dc08d0f8f51feb09e583445223704fce0448bb8951ac142b63118e8e8519cc"
+    }
+  ],
+  "original_scripts": "Empty in supplied snapshots; replaced with local replay handlers.",
+  "original_destination": "https://clubmile.net/api/consultar.php",
+  "destination_evidence": "HTML form action only; original server and payload not verified.",
+  "limits": [
+    "Only supplied states replayed; no successful authentication, points balance, or post-submit page inferred.",
+    "UI actions send simulated events to the same-origin local /__mock/events endpoint.",
+    "Saved inputs cleared; extension overlays removed; no original scripts or external resource requests retained."
+  ]
+}

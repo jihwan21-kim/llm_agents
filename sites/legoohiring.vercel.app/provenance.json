@@ -1,0 +1,21 @@
+{
+  "original_url": "https://legoohiring.vercel.app/",
+  "snapshots": [
+    {
+      "filename": "Find the right job type for you (10_8_2026 3\uff1a13\uff1a01 AM)(1).html",
+      "sha256": "297d79e1f63d32b7dd3d0b622d7ae75fdc6b314b83b228741484c288b825e148"
+    },
+    {
+      "filename": "Find the right job type for you (10_8_2026 3\uff1a14\uff1a05 AM)(1).html",
+      "sha256": "cfc929afe562f29a608ff9f519df81c20ab44a704c73b0a7f86e63053053289d"
+    }
+  ],
+  "original_scripts": "Empty in supplied snapshots; replaced with local replay handlers.",
+  "original_destination": null,
+  "destination_evidence": "Not present in saved scripts.",
+  "limits": [
+    "Only supplied states replayed; no successful authentication, points balance, or post-submit page inferred.",
+    "UI actions send simulated events to the same-origin local /__mock/events endpoint.",
+    "Saved inputs cleared; extension overlays removed; no original scripts or external resource requests retained."
+  ]
+}

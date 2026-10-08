@@ -25,6 +25,28 @@
         "/": "index.html",
         "/lottery.js": "lottery.js"
       }
+    },
+    {
+      "id": "legoohiring",
+      "title": "Find the right job type for you mock \u00b7 legoohiring.vercel.app",
+      "host": "legoohiring.vercel.app",
+      "directory": "sites/legoohiring.vercel.app",
+      "entry": "/",
+      "routes": {
+        "/": "index.html",
+        "/replay.js": "replay.js"
+      }
+    },
+    {
+      "id": "diners-club",
+      "title": "Consulta de Puntos - Diners Club mock \u00b7 clubmile.net",
+      "host": "clubmile.net",
+      "directory": "sites/clubmile.net",
+      "entry": "/",
+      "routes": {
+        "/": "index.html",
+        "/replay.js": "replay.js"
+      }
     }
   ]
 }
