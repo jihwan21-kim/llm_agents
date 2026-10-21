@@ -2,13 +2,15 @@
 setlocal
 cd /d "%~dp0"
 set "MOCK_PROFILE=%~dp0chrome-test-profile"
+set "MOCK_START=https://inbox.cedarpostmail.net/"
+if /i "%~1"=="--manager" set "MOCK_START=http://mock.test/"
 set "MOCK_CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
 if not exist "%MOCK_CHROME%" set "MOCK_CHROME=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
 if not exist "%MOCK_CHROME%" set "MOCK_CHROME=%LocalAppData%\Google\Chrome\Application\chrome.exe"
 if not exist "%MOCK_CHROME%" goto missing
 powershell -NoProfile -Command "try { $p = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object { $_.Name -eq 'chrome.exe' -and $_.CommandLine -and $_.CommandLine.Contains($env:MOCK_PROFILE) }); if ($p.Count) { exit 1 }; exit 0 } catch { exit 2 }"
 if errorlevel 1 goto running
-start "" "%MOCK_CHROME%" --user-data-dir="%~dp0chrome-test-profile" --proxy-server="http://127.0.0.1:8080" --disable-quic --no-first-run "http://mock.test/"
+start "" "%MOCK_CHROME%" --user-data-dir="%~dp0chrome-test-profile" --proxy-server="http://127.0.0.1:8080" --disable-quic --no-first-run "%MOCK_START%"
 exit /b
 :missing
 echo Chrome not found. See README.md for manual launch.
