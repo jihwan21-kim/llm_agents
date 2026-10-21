@@ -128,7 +128,7 @@ class ReplayTests(unittest.TestCase):
         self.assertIn('const el = elementFor(e);', source)
         self.assertIn('el.closest(interactive) || el', source)
         self.assertIn('const chain = event.composedPath?.() || [];', replay)
-        self.assertIn('const edge = edges.find(e => e.kind === "click"', replay)
+        self.assertIn('const edge = bestEdge(target, "click");', replay)
 
     def test_replay_prefers_specific_click_over_broad_no_change(self):
         # Exercise the actual replay JS, not a Python duplicate of its
