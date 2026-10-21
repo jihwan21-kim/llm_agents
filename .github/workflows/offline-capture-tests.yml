@@ -9,6 +9,9 @@ on:
       - record_site.py
       - tests/test_capture_replay.py
       - tests/test_action_settling.py
+      - tests/test_recorded_js_sources.py
+      - tests/test_js_dom_fixture.py
+      - gym/fixtures/js-demo/**
       - automatic_capture.py
       - navigation_analysis.py
       - .github/workflows/offline-capture-tests.yml
