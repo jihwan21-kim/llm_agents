@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 if "%~1"=="" (
-  echo Usage: start-har-mock-windows.bat "recordings\site-id\run-folder" [--preview-dom-settling]
+  echo Usage: start-har-mock-windows.bat "recording-folder" [--preview-dom-settling ^| --trusted-fixture-js]
   exit /b 1
 )
 if not exist ".venv\Scripts\python.exe" (

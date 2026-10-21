@@ -25,19 +25,27 @@ ALLOWED_FIELDS = {"email", "password", "tel", "number", "other"}
 
 
 class RecordedMockProxy(MockProxy):
-    def __init__(self, directory, preview_dom_settling=False):
+    def __init__(self, directory, preview_dom_settling=False,
+                 trusted_fixture_js=False):
         super().__init__()
-        self.capture = CaptureReplay(directory, preview_dom_settling=preview_dom_settling)
+        self.capture = CaptureReplay(
+            directory, preview_dom_settling=preview_dom_settling,
+            trusted_fixture_js=trusted_fixture_js)
         if self.capture.host in {"mock.test"}:
             raise ValueError("Cannot shadow manager host")
         self.capture_events = []
         print(f"Offline replay: {self.capture.host} with "
               f"{len(self.capture.steps)} snapshots and {len(self.capture.assets)} assets",
               flush=True)
-        print("FIDELITY WARNING: this is sanitized static snapshot replay. "
-              "Captured original JS does NOT run; backend effects are not reproduced. "
-              "Use fidelity_audit.py for a case-specific gap report.",
-              flush=True)
+        if self.capture.trusted_fixture_js:
+            print("TRUSTED SYNTHETIC FIXTURE: one exact-hash, reviewed external "
+                  "JavaScript resource is executable; no original backend. "
+                  "All upstream connections remain denied.", flush=True)
+        else:
+            print("FIDELITY WARNING: this is sanitized static snapshot replay. "
+                  "Captured original JS does NOT run; backend effects are not reproduced. "
+                  "Use fidelity_audit.py for a case-specific gap report.",
+                  flush=True)
         print(f"Initial displayed state: {self.capture.initial_step}",
               flush=True)
         print(f"HTML href destinations mapped: {len(self.capture.inferred_edges)} (inferred, not observed)",
@@ -157,13 +165,14 @@ class RecordedMockProxy(MockProxy):
         return self._respond(flow, status, body, mime)
 
 
-async def run(directory, preview_dom_settling=False):
+async def run(directory, preview_dom_settling=False, trusted_fixture_js=False):
     options = Options(listen_host="127.0.0.1", listen_port=8080,
                       confdir=str(ROOT / "mitm-ca"))
     master = DumpMaster(options)
     master.options.update(connection_strategy="lazy", upstream_cert=False,
                           stream_large_bodies=None, body_size_limit="1m")
-    addon = RecordedMockProxy(directory, preview_dom_settling=preview_dom_settling)
+    addon = RecordedMockProxy(directory, preview_dom_settling=preview_dom_settling,
+                              trusted_fixture_js=trusted_fixture_js)
     master.addons.add(addon)
     print("Dedicated proxy browser only. All upstream connections are DENIED.", flush=True)
     print("Open recorded URL:", addon.capture.start_url, flush=True)
@@ -180,8 +189,12 @@ if __name__ == "__main__":
     parser.add_argument("--recording", required=True, help="Recording folder with bundle.json")
     parser.add_argument("--preview-dom-settling", action="store_true",
                         help="Opt in to automatic local playback of unverified same-URL DOM-only snapshots")
+    parser.add_argument("--trusted-fixture-js", action="store_true",
+                        help="Execute only exact-hash, reviewed synthetic fixture.test app.js; "
+                             "not available for captured external/phishing hosts")
     args = parser.parse_args()
     try:
-        asyncio.run(run(args.recording, preview_dom_settling=args.preview_dom_settling))
+        asyncio.run(run(args.recording, preview_dom_settling=args.preview_dom_settling,
+                        trusted_fixture_js=args.trusted_fixture_js))
     except KeyboardInterrupt:
         pass

@@ -21,6 +21,12 @@ SIMULATOR = "/__mock_capture/sim.js"
 SCRIPT_INDEX = "/__mock_capture/scripts"
 SCRIPT_INDEX_JSON = "/__mock_capture/scripts.json"
 SCRIPT_SOURCE = "/__mock_capture/source/"
+TRUSTED_JS_ASSETS = "/__mock_capture/trusted-js/"
+# The only executable captured JS is a byte-identical copy of an explicitly
+# reviewed, shipped benign fixture script. A renamed phishing capture cannot
+# opt in by providing its own manifest or moving to a .test hostname.
+TRUSTED_FIXTURE_HOST = "fixture.test"
+TRUSTED_FIXTURE_SCRIPT = "/app.js"
 MAX_ASSET_BYTES = 12 * 1024 * 1024
 MAX_SOURCE_BYTES = 1024 * 1024
 MAX_SCRIPT_SOURCES = 128
@@ -244,10 +250,12 @@ class SnapshotSanitizer(HTMLParser):
     DROP = {"script", "iframe", "object", "embed", "base", "noscript",
             "frame", "frameset", "foreignobject", "template"}
 
-    def __init__(self, page_url, asset_urls):
+    def __init__(self, page_url, asset_urls, trusted_js_urls=None):
         super().__init__(convert_charrefs=False)
         self.page_url = page_url
         self.asset_urls = asset_urls
+        self.trusted_js_urls = trusted_js_urls or {}
+        self.trusted_script_open = False
         self.link_count = 0
         self.result = []
         self.blocked = []
@@ -259,10 +267,22 @@ class SnapshotSanitizer(HTMLParser):
             if tag in self.DROP:
                 self.blocked.append(tag)
             return
+        values = {k.lower(): v for k, v in attrs if k}
+        if tag == "script":
+            # Never activate inline scripts from captured pages. In the
+            # explicitly generated synthetic fixture only, a reviewed
+            # same-origin external script may be reinserted by content hash.
+            src = values.get("src", "")
+            allowed = self.trusted_js_urls.get(urljoin(self.page_url, src)) if src else None
+            script_type = (values.get("type") or "text/javascript").lower()
+            if allowed and script_type in {"text/javascript", "application/javascript"}:
+                defer_attr = " defer" if "defer" in values else ""
+                self.result.append(f'<script src="{html.escape(allowed, quote=True)}"{defer_attr}>')
+                self.trusted_script_open = True
+                return
         if tag in self.DROP:
             self.blocked.append(tag)
             return
-        values = {k.lower(): v for k, v in attrs if k}
         if tag == "meta" and values.get("http-equiv", "").lower() in {
             "refresh", "content-security-policy"}:
             return
@@ -316,12 +336,16 @@ class SnapshotSanitizer(HTMLParser):
             if tag == self.blocked[-1]:
                 self.blocked.pop()
             return
+        if tag == "script" and self.trusted_script_open:
+            self.trusted_script_open = False
+            self.result.append("</script>")
+            return
         if tag == "style" and self.style_depth:
             self.style_depth -= 1
         self.result.append(f"</{tag}>")
 
     def handle_data(self, data):
-        if not self.blocked:
+        if not self.blocked and not self.trusted_script_open:
             self.result.append(rewrite_css(data, self.page_url, self.asset_urls)
                                if self.style_depth else data)
 
@@ -338,7 +362,7 @@ class SnapshotSanitizer(HTMLParser):
 
 
 class CaptureReplay:
-    def __init__(self, directory, preview_dom_settling=False):
+    def __init__(self, directory, preview_dom_settling=False, trusted_fixture_js=False):
         self.directory = Path(directory).expanduser().resolve(strict=True)
         self.bundle = json.loads((self.directory / "bundle.json").read_text(encoding="utf-8"))
         self.start_url = self.bundle.get("startUrl", "")
@@ -346,6 +370,15 @@ class CaptureReplay:
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise ValueError("Invalid startUrl in bundle")
         self.host = parsed.hostname.lower()
+        self.trusted_fixture_js = bool(trusted_fixture_js)
+        self.trusted_js_urls = {}
+        self.trusted_js_sources = {}
+        if self.trusted_fixture_js:
+            if (parsed.scheme != "https" or parsed.netloc.lower() != TRUSTED_FIXTURE_HOST):
+                raise ValueError("Executable original JS is available only for the packaged synthetic fixture.test")
+            approved_source = (Path(__file__).resolve().parent /
+                               "gym/fixtures/js-demo/app.js").read_bytes()
+            self.approved_js_sha256 = hashlib.sha256(approved_source).hexdigest()
         self.steps = self.bundle.get("steps", [])
         self.transitions = self.bundle.get("transitions", [])
         if not self.steps:
@@ -425,6 +458,15 @@ class CaptureReplay:
                 self.script_sources[digest] = raw
                 self.script_index.append(entry_data)
                 total_source_bytes += len(raw)
+                if (self.trusted_fixture_js and
+                        urlsplit(url).scheme == "https" and
+                        urlsplit(url).netloc.lower() == TRUSTED_FIXTURE_HOST and
+                        urlsplit(url).path == TRUSTED_FIXTURE_SCRIPT and
+                        not urlsplit(url).query and
+                        digest == self.approved_js_sha256):
+                    trusted_uri = TRUSTED_JS_ASSETS + digest
+                    self.trusted_js_sources[digest] = raw
+                    self.trusted_js_urls[url] = trusted_uri
                 continue
             # Never execute captured JavaScript or serve active source files as
             # browser assets; original executable scripts remain removed.
@@ -464,7 +506,7 @@ class CaptureReplay:
                 raise ValueError("Snapshot path escapes recording")
             source = step.get("url") or self.start_url
             raw_page = file.read_text(encoding="utf-8", errors="replace")
-            parser = SnapshotSanitizer(source, self.urls)
+            parser = SnapshotSanitizer(source, self.urls, self.trusted_js_urls)
             parser.feed(raw_page)
             parser.close()
             edges = []
@@ -511,8 +553,11 @@ class CaptureReplay:
             preview_to = self.preview_edges.get(index)
             preview_attr = (f' data-dom-settle-to="{preview_to}"'
                             if preview_to is not None else "")
-            shim = (f'<script src="{SIMULATOR}" data-step="{index}" '
-                    f'data-transitions="{transitions_attr}"{preview_attr}></script>')
+            # Running reviewed fixture JavaScript and synthetic click-shim
+            # navigation simultaneously would distort native JS behavior.
+            shim = "" if self.trusted_fixture_js else (
+                f'<script src="{SIMULATOR}" data-step="{index}" '
+                f'data-transitions="{transitions_attr}"{preview_attr}></script>')
             page = "".join(parser.result)
             page = (page.replace("</body>", shim + "</body>", 1)
                     if "</body>" in page else page + shim)
@@ -521,6 +566,12 @@ class CaptureReplay:
     def respond(self, method, path, query=""):
         if method not in {"GET", "HEAD"}:
             return 405, b"Method not allowed", "text/plain"
+        if path.startswith(TRUSTED_JS_ASSETS):
+            digest = path[len(TRUSTED_JS_ASSETS):]
+            source = self.trusted_js_sources.get(digest)
+            if source is None:
+                return 404, b"Unknown trusted script", "text/plain"
+            return 200, source if method == "GET" else b"", "text/javascript; charset=utf-8"
         if path == SCRIPT_INDEX_JSON:
             public_data = {"execution": False, "source": "recorded_har",
                            "scripts": self.script_index,
