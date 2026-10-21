@@ -1,0 +1,5 @@
+body { font-family: system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 1rem; line-height: 1.5; }
+section { margin: 1.2rem 0; padding: 1rem; border: 1px solid #aaa; border-radius: 8px; }
+button { padding: .7rem 1rem; margin: .2rem; cursor: pointer; }
+button[aria-pressed="true"] { outline: 3px solid #286dbd; }
+a { color: #155ea9; }

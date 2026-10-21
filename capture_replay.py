@@ -16,7 +16,25 @@ from navigation_analysis import extract_html_navigation, temporal_dom_candidates
 
 ASSETS = "/__mock_capture/assets/"
 SIMULATOR = "/__mock_capture/sim.js"
+# Captured JS is inspectable as *text* only, never inserted as an executable
+# script. This is an explicit research inspection channel, not a page feature.
+SCRIPT_INDEX = "/__mock_capture/scripts"
+SCRIPT_INDEX_JSON = "/__mock_capture/scripts.json"
+SCRIPT_SOURCE = "/__mock_capture/source/"
 MAX_ASSET_BYTES = 12 * 1024 * 1024
+MAX_SOURCE_BYTES = 1024 * 1024
+MAX_SCRIPT_SOURCES = 128
+MAX_TOTAL_SOURCE_BYTES = 16 * 1024 * 1024
+
+def is_javascript_response(url, mime):
+    """Recognize captured JavaScript, but never treat HTML error pages as JS."""
+    content_type = mime.lower().split(";", 1)[0].strip()
+    if any(blocked in content_type for blocked in ("html", "json", "xml")):
+        return False
+    return ("javascript" in content_type or "ecmascript" in content_type
+            or (urlsplit(url).path.lower().endswith((".js", ".mjs"))
+                and content_type in {"text/plain", "application/octet-stream", ""}))
+
 
 SIM_JS = r"""
 (() => {
@@ -365,6 +383,9 @@ class CaptureReplay:
         self.initial_step = candidates[0] if candidates else 0
         har = json.loads((self.directory / "trace.har").read_text(encoding="utf-8"))
         self.assets, self.urls = {}, {}
+        self.script_sources, self.script_index = {}, []
+        self.script_sources_skipped = 0
+        total_source_bytes = 0
         for entry in har.get("log", {}).get("entries", []):
             req, response = entry.get("request") or {}, entry.get("response") or {}
             payload = response.get("content") or {}
@@ -373,7 +394,40 @@ class CaptureReplay:
                 continue
             mime = str(payload.get("mimeType") or mimetypes.guess_type(urlsplit(url).path)[0]
                        or "application/octet-stream")
-            # Never serve captured JavaScript, HTML, JSON, or SVG as replay assets.
+            if is_javascript_response(url, mime):
+                # Text-only source inspection, no browser execution. Limit total
+                # RAM and drop duplicates. Avoid exporting URL queries/tokens.
+                if len(body) > MAX_SOURCE_BYTES * 2:
+                    self.script_sources_skipped += 1
+                    continue
+                try:
+                    raw = (base64.b64decode(body, validate=True)
+                           if payload.get("encoding") == "base64"
+                           else body.encode("utf-8"))
+                except (ValueError, UnicodeError):
+                    self.script_sources_skipped += 1
+                    continue
+                digest = hashlib.sha256(raw).hexdigest()
+                if digest in self.script_sources:
+                    continue
+                if (len(raw) > MAX_SOURCE_BYTES
+                        or len(self.script_sources) >= MAX_SCRIPT_SOURCES
+                        or total_source_bytes + len(raw) > MAX_TOTAL_SOURCE_BYTES):
+                    self.script_sources_skipped += 1
+                    continue
+                src_path = urlsplit(url).path or "/"
+                basename = (src_path.rsplit("/", 1)[-1] or "unnamed.js")[:100]
+                entry_data = {
+                    "id": digest, "name": basename,
+                    "origin": ("recorded" if urlsplit(url).hostname == self.host
+                               else "external"), "bytes": len(raw),
+                }
+                self.script_sources[digest] = raw
+                self.script_index.append(entry_data)
+                total_source_bytes += len(raw)
+                continue
+            # Never execute captured JavaScript or serve active source files as
+            # browser assets; original executable scripts remain removed.
             if any(s in mime.lower() for s in ("javascript", "html", "json", "svg", "xml")):
                 continue
             try:
@@ -467,6 +521,39 @@ class CaptureReplay:
     def respond(self, method, path, query=""):
         if method not in {"GET", "HEAD"}:
             return 405, b"Method not allowed", "text/plain"
+        if path == SCRIPT_INDEX_JSON:
+            public_data = {"execution": False, "source": "recorded_har",
+                           "scripts": self.script_index,
+                           "skipped_due_to_limits": self.script_sources_skipped}
+            raw = json.dumps(public_data, ensure_ascii=False).encode("utf-8")
+            return 200, raw if method == "GET" else b"", "application/json; charset=utf-8"
+        if path == SCRIPT_INDEX:
+            # No inline JS, external scripts, or live links. Explicit opt-in
+            # inspection URL so baseline replay DOM is not contaminated.
+            rows = "".join(
+                '<li><a href="' + SCRIPT_SOURCE + item["id"] + '">' +
+                html.escape(item["name"]) + "</a> (" +
+                item["origin"] + ", " + str(item["bytes"]) + " bytes)</li>"
+                for item in self.script_index
+            )
+            markup = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>Recorded JS, read-only</title></head><body>"
+                "<h1>Recorded JavaScript (read-only, not executed)</h1>"
+                "<p>Explicit research inspection only. Agents do not "
+                "automatically see this source in screenshots or the page DOM.</p>"
+                "<p>Original page scripts are deliberately not run here.</p>"
+                "<ul>" + rows + "</ul></body></html>"
+            )
+            return 200, markup.encode() if method == "GET" else b"", "text/html; charset=utf-8"
+        if path.startswith(SCRIPT_SOURCE):
+            digest = path[len(SCRIPT_SOURCE):]
+            source = self.script_sources.get(digest)
+            if source is None:
+                return 404, b"Unknown recorded JavaScript", "text/plain"
+            # The proxy adds X-Content-Type-Options: nosniff. This is data,
+            # never text/javascript, even if the content contains JS syntax.
+            return 200, source if method == "GET" else b"", "text/plain; charset=utf-8"
         if path == SIMULATOR:
             return 200, SIM_JS.encode(), "text/javascript; charset=utf-8"
         if path.startswith(ASSETS):

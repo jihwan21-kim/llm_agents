@@ -10,7 +10,7 @@ from mitmproxy import http
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
-from capture_replay import CaptureReplay
+from capture_replay import CaptureReplay, SCRIPT_INDEX
 from proxy_app import MockProxy
 
 ROOT = Path(__file__).resolve().parent
@@ -40,6 +40,10 @@ class RecordedMockProxy(MockProxy):
               flush=True)
         print(f"DOM settling candidates: {len(self.capture.dom_settle_candidates)}; "
               f"preview {'ENABLED' if self.capture.preview_dom_settling else 'DISABLED'}",
+              flush=True)
+        print(f"Captured JS available for read-only inspection: "
+              f"{len(self.capture.script_index)} files; "
+              f"{self.capture.script_sources_skipped} skipped by safety limits.",
               flush=True)
 
     def _respond(self, flow, status, body=b"", mime="text/plain"):
@@ -159,6 +163,10 @@ async def run(directory, preview_dom_settling=False):
     master.addons.add(addon)
     print("Dedicated proxy browser only. All upstream connections are DENIED.", flush=True)
     print("Open recorded URL:", addon.capture.start_url, flush=True)
+    parts = urlsplit(addon.capture.start_url)
+    print("Read-only JavaScript listing:",
+          parts.scheme + "://" + parts.netloc + SCRIPT_INDEX,
+          "(research inspection only; does not execute sources)", flush=True)
     print("Synthetic events: http://mock.test/__mock_capture/events", flush=True)
     await master.run()
 
