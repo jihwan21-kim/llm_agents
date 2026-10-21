@@ -190,6 +190,18 @@ setTimeout(() => {
     console.error("Wrong chosen transition:", clickedUrl, posted);
     process.exit(1);
   }
+  // A *different* click in main must not be counted as the broad
+  // 1 -> 1 no-change edge. It should be an unmatched attempt.
+  inner.closest = selector => selector === "body > main" ? main : null;
+  listeners.click({
+    composedPath: () => [inner], target:inner, preventDefault: () => {}
+  });
+  setTimeout(() => {
+    if (posted?.to !== 1 || posted?.selector !== "") {
+      console.error("Broad no-op matched unrelated button:", posted);
+      process.exit(1);
+    }
+  }, 30);
 }, 30);
 """.replace("SIMULATOR", json.dumps(sim))
         completed = subprocess.run([node, "-e", harness], capture_output=True,
