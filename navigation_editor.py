@@ -243,6 +243,7 @@ EDITOR_JS = r"""(() => {
     const canEdit = !!src && !src.blocked && !!dest && !dest.blocked &&
       !previewOnly && previewStepId === src.id && !selectedIsFormControl;
     $("save").disabled = !canEdit;
+    $("save").disabled = false;
     $("test").disabled = !dest;
     $("sourcePreview").disabled = !src;
     $("previousRecorded").disabled = !state || previewStepId === null || previewStepId <= 0;
