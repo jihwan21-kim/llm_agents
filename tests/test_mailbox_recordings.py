@@ -17,13 +17,32 @@ def make_recording(directory, host):
     url = "https://" + host + "/entry"
     (directory / "bundle.json").write_text(json.dumps({
         "startUrl": url,
-        "steps": [{"url": url, "html": "step-000.html"}],
-        "transitions": [],
+        "steps": [
+            {"url": url, "html": "step-000.html"},
+            {"url": "https://" + host + "/next", "html": "step-001.html"},
+            {"url": "https://" + host + "/login", "html": "step-002.html"}
+        ],
+        "transitions": [
+            {"from": 0, "to": 1, "selector": "#continue",
+             "kind": "click", "outcome": "changed", "observed": True},
+            {"from": 1, "to": 2, "selector": "#enter",
+             "kind": "click", "outcome": "changed", "observed": True},
+            {"from": 0, "to": 2, "selector": "#continue",
+             "kind": "click", "outcome": "changed", "observed": True}
+        ],
     }), encoding="utf-8")
     (directory / "step-000.html").write_text(
         "<!doctype html><html><body><h1>Offline test</h1>"
-        "<button onclick='steal()'>Continue</button>"
+        "<button id='continue' onclick='steal()'>Continue</button>"
         "<script>window.alert('untrusted')</script></body></html>",
+        encoding="utf-8")
+    (directory / "step-001.html").write_text(
+        "<!doctype html><html><body><h1>Next</h1>"
+        "<button id='enter'>Continue</button></body></html>",
+        encoding="utf-8")
+    (directory / "step-002.html").write_text(
+        "<!doctype html><html><body><h1>Sign in</h1>"
+        "<form><input type='password'><button>Continue</button></form></body></html>",
         encoding="utf-8")
     (directory / "trace.har").write_text(
         json.dumps({"log": {"entries": []}}), encoding="utf-8")
@@ -93,7 +112,7 @@ class MailboxRecordingConfigTests(unittest.TestCase):
         self.assertIn("beta.example.test", inbox.messages[1]["subject"])
         self.assertTrue(all("Offline snapshot" in m["subject"] for m in inbox.messages))
 
-    def test_proxy_serves_both_hosts_but_no_scripts_or_writes(self):
+    def test_proxy_serves_both_hosts_with_safe_clicks_but_no_form_writes(self):
         from mailbox_recordings import ROOT
         with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             # Use repo-local folder for real loader, but keep fixtures in tmp:
@@ -138,10 +157,15 @@ class MailboxRecordingConfigTests(unittest.TestCase):
                 })
                 self.assertEqual(len(proxy.mailbox.messages), len(proxy_app_sites()) + 2)
 
-                def fetch(host, path, method="GET"):
+                def fetch(host, path, method="GET", body=None):
+                    headers = {}
+                    if body is not None:
+                        headers = {"Origin": "https://" + host,
+                                   "Content-Type": "application/json"}
                     request = types.SimpleNamespace(
                         host=host, path=path, port=443, method=method,
-                        headers={}, raw_content=b""
+                        headers=headers,
+                        raw_content=json.dumps(body).encode() if body is not None else b""
                     )
                     flow = types.SimpleNamespace(request=request, response=None)
                     proxy.handle(flow)
@@ -152,12 +176,35 @@ class MailboxRecordingConfigTests(unittest.TestCase):
                         response = fetch(host, "/entry")
                         self.assertEqual(response.status_code, 200)
                         self.assertIn(b"Offline test", response.content)
-                        self.assertIn("script-src 'none'",
+                        self.assertIn("script-src 'self'",
                                       response.headers["Content-Security-Policy"])
                         self.assertIn("form-action 'none'",
                                       response.headers["Content-Security-Policy"])
+                        self.assertEqual(fetch(host, "/__mock_capture/sim.js").status_code, 200)
                         self.assertEqual(fetch(host, "/entry", "POST").status_code, 405)
-                        self.assertEqual(fetch(host, "/__mock_capture/event", "POST").status_code, 405)
+                        click = {"kind": "button_click", "step": 0, "to": 1,
+                                 "selector": "#continue", "filled_types": []}
+                        event = fetch(host, "/__mock_capture/event", "POST", click)
+                        self.assertEqual(event.status_code, 200)
+                        self.assertEqual(json.loads(event.content)["to"], 1)
+                        self.assertTrue(json.loads(event.content)["observed"])
+                        self.assertIn(b"Next", fetch(host, "/next?_step=1").content)
+                        # Authentication destination and form submissions
+                        # remain non-replayable, regardless of saved edges.
+                        click["to"] = 2
+                        self.assertEqual(fetch(host, "/__mock_capture/event",
+                                               "POST", click).status_code, 400)
+                        click = {"kind": "button_click", "step": 1, "to": 2,
+                                 "selector": "#enter", "filled_types": []}
+                        self.assertEqual(fetch(host, "/__mock_capture/event",
+                                               "POST", click).status_code, 400)
+                        bad = {"kind": "form_submit", "step": 0, "to": 1,
+                               "selector": "#continue", "filled_types": []}
+                        self.assertEqual(fetch(host, "/__mock_capture/event",
+                                               "POST", bad).status_code, 400)
+                        self.assertIn("script-src 'none'",
+                                      fetch(host, "/login?_step=2").headers["Content-Security-Policy"])
+                        self.assertEqual(fetch(host, "/login", "POST").status_code, 405)
                 entries = json.loads(fetch("inbox.cedarpostmail.net", "/api/messages").content)
                 self.assertEqual(len(entries), len(proxy_app_sites()) + 2)
                 for i, host in enumerate(proxy.captures, start=len(proxy_app_sites())+1):
