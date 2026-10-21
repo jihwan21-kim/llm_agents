@@ -31,7 +31,7 @@ class MockProxy:
   self.mail_events.append(row)
   del self.mail_events[:-1000]
   with self.logfile.open('a',encoding='utf-8') as f:
-   f.write(json.dumps(row)+'\\n')
+   f.write(json.dumps(row)+'\n')
  def request(self,flow):
   try:self.handle(flow)
   except Exception:
