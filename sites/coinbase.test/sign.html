@@ -16,12 +16,12 @@ a{color:#1652f0;text-decoration:none}</style></head>
 <main><div class="panel">
 <h1>Sign in to your account</h1>
 <div class="fixture">Local research fixture. No real accounts, passwords, or third-party services are connected.</div>
-<form id="demo" autocomplete="off">
+<form id="demo" action="/sign/complete" method="GET" autocomplete="off">
 <label for="email">Email</label><input id="email" type="email" inputmode="email" placeholder="Enter a fictitious test email" required autocomplete="off">
 <button type="submit">Continue</button>
 </form>
 <p class="note">This synthetic demo continues to a read-only confirmation page. The email is discarded immediately and never stored or transmitted.</p>
 <p><a href="/">Back to account overview</a></p>
 </div></main>
-<script>document.getElementById('demo').addEventListener('submit',function(event){event.preventDefault();window.location.assign('/sign/complete');});</script>
+<script src="/sign-demo.js"></script>
 </body></html>
