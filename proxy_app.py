@@ -9,7 +9,7 @@ HOST='mock.test'
 # Explicit service allowlist, not a wildcard for all Google-owned domains.
 AGENT_API_HOSTS={
  'api.openai.com', 'cdn.platform.openai.com', 'api.anthropic.com',
- 'claude.ai',
+ 'claude.ai', 'platform.claude.com', 's-cdn.anthropic.com',
  'accounts.google.com', 'oauth2.googleapis.com', 'www.googleapis.com',
  'ssl.gstatic.com', 'www.gstatic.com', 'translate.googleapis.com',
 }
