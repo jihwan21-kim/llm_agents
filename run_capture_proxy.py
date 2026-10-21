@@ -225,12 +225,18 @@ class RecordedMockProxy(MockProxy):
                 and edge["outcome"] == "html-href"
                 for edge in self.capture.inferred_edges
             ) if payload["kind"] == "button_click" else False
-            allowed = observed or static_navigation
+            manual_navigation = any(
+                item["from"] == step and item["to"] == target
+                and item["selector"] == selector
+                for item in self.capture.manual_edges
+            ) if payload["kind"] == "button_click" else False
+            allowed = observed or static_navigation or manual_navigation
             event = {"time": datetime.now(timezone.utc).isoformat(),
                      "kind": payload["kind"], "step": step,
                      "to": target if allowed else step,
                      "observed_transition": observed,
                      "static_navigation": static_navigation,
+                     "manual_navigation": manual_navigation,
                      "filled_types": kinds, "upstream_sent": False,
                      "simulated": True}
             self.capture_events.append(event)
@@ -238,6 +244,7 @@ class RecordedMockProxy(MockProxy):
             self._metadata_log("capture_simulated_event", path, "POST")
             return self._respond(flow, 200, json.dumps({"recorded": True, "observed": observed,
                                                        "static_navigation": static_navigation,
+                                                       "manual_navigation": manual_navigation,
                                                        "to": target if allowed else step}).encode(),
                                  "application/json; charset=utf-8")
 
@@ -252,7 +259,7 @@ class RecordedMockProxy(MockProxy):
 
 
 async def run(directory, preview_dom_settling=False, trusted_fixture_js=False,
-              agent_js_inspection=False):
+              agent_js_inspection=False, edit_navigation=False):
     options = Options(listen_host="127.0.0.1", listen_port=8080,
                       confdir=str(ROOT / "mitm-ca"))
     master = DumpMaster(options)
@@ -260,7 +267,8 @@ async def run(directory, preview_dom_settling=False, trusted_fixture_js=False,
                           stream_large_bodies=None, body_size_limit="1m")
     addon = RecordedMockProxy(directory, preview_dom_settling=preview_dom_settling,
                               trusted_fixture_js=trusted_fixture_js,
-                              agent_js_inspection=agent_js_inspection)
+                              agent_js_inspection=agent_js_inspection,
+                              edit_navigation=edit_navigation)
     master.addons.add(addon)
     print("Dedicated proxy browser only. All upstream connections are DENIED.", flush=True)
     print("Open recorded URL:", addon.capture.start_url, flush=True)
@@ -271,6 +279,9 @@ async def run(directory, preview_dom_settling=False, trusted_fixture_js=False,
     if agent_js_inspection:
         print("RESEARCH SOURCE-VISIBLE MODE: Page includes a visible source index link.", flush=True)
         print("Never use this condition as an unmodified page-fidelity baseline.", flush=True)
+    if edit_navigation:
+        print("Visual navigation editor:", parts.scheme + "://" + parts.netloc + EDITOR,
+              "(benign screens only; persisted local overrides)", flush=True)
     print("Synthetic events: http://mock.test/__mock_capture/events", flush=True)
     await master.run()
 
@@ -286,10 +297,13 @@ if __name__ == "__main__":
     parser.add_argument("--agent-js-inspection", action="store_true",
                         help="Show a visible link to byte-preserved HAR JS sources; "
                              "sources remain text-only and unexecuted")
+    parser.add_argument("--edit-navigation", action="store_true",
+                        help="Enable the visual editor for benign recorded navigation")
     args = parser.parse_args()
     try:
         asyncio.run(run(args.recording, preview_dom_settling=args.preview_dom_settling,
                         trusted_fixture_js=args.trusted_fixture_js,
-                        agent_js_inspection=args.agent_js_inspection))
+                        agent_js_inspection=args.agent_js_inspection,
+                        edit_navigation=args.edit_navigation))
     except KeyboardInterrupt:
         pass
