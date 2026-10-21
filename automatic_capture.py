@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout, Error as PlaywrightError
 from record_site import ROOT, sanitize_har
+from navigation_analysis import analyze_recording
 
 MARKER = "__MOCK_AUTO_EVENT__"
 EVENT_SCRIPT = r"""
@@ -410,6 +411,12 @@ def main():
     (out / "action-events.json").write_text(
         json.dumps(recorder.action_events, indent=2), encoding="utf-8"
     )
+    navigation_report = analyze_recording(out)
+    (out / "navigation-analysis.json").write_text(
+        json.dumps(navigation_report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"Navigation clues: {navigation_report['html_route_count']} HTML links/forms, "
+          f"{navigation_report['js_route_hint_count']} JavaScript literal routes.")
     clicks = sum(a["kind"] == "click" for a in recorder.action_events)
     print(f"Saved {len(steps)} states, {len(transitions)} action edges, {assets} assets and {count} HAR entries.")
     print(f"Captured {clicks} clicks and {len(recorder.action_events)} total user actions.")
