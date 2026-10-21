@@ -203,6 +203,8 @@ class Recorder:
             self.pending = {
                 "kind": "browser_navigation", "selector": "", "tag": "",
                 "from": self.current_index, "started": now,
+                "action_id": f"nav-{len(self.navigation_events)}",
+                "seq": None, "blocked_write": False,
             }
         self.last_change = now
 
@@ -226,6 +228,8 @@ class Recorder:
                 self.pending = {
                     "kind": "browser_navigation", "selector": "", "tag": "",
                     "from": self.current_index, "started": now,
+                    "action_id": f"nav-{len(self.navigation_events)}",
+                    "seq": None, "blocked_write": False,
                 }
             if not self.seen_mutation:
                 self.mutation_started = now
@@ -244,12 +248,13 @@ class Recorder:
                 self._complete_pending("interrupted", observed=False)
             seq = len(self.action_events)
             incoming = event.get("action_id")
-            action_id = incoming if type(incoming) is int and incoming >= 0 else seq + 1
+            action_id = seq + 1
             selector = str(event.get("selector", ""))[:256]
             self.action_events.append({
                 "action_id": action_id, "kind": event["kind"],
                 "selector": selector, "from": self.current_index,
-                "seq": seq, "outcome": "pending"
+                "seq": seq, "browser_action_id": incoming if type(incoming) is int else None,
+                "outcome": "pending"
             })
             self.pending = {
                 "kind": event["kind"], "selector": selector,
@@ -391,7 +396,7 @@ class Recorder:
         state = self.state()
         if not state:
             return
-        signature = hashlib.sha256((state[0] + "\\n" + state[1]).encode()).hexdigest()
+        signature = hashlib.sha256((state[0] + "\n" + state[1]).encode()).hexdigest()
         if signature != self.saved_signature:
             self.snapshot(self.pending["kind"] if self.pending else "dom-change", state)
             return
@@ -415,7 +420,7 @@ class Recorder:
             state = self.state()
             if state:
                 url, html = state
-                signature = hashlib.sha256((url + "\\n" + html).encode()).hexdigest()
+                signature = hashlib.sha256((url + "\n" + html).encode()).hexdigest()
                 if signature != self.saved_signature:
                     self.snapshot(self.pending["kind"], state)
         if self.pending:
