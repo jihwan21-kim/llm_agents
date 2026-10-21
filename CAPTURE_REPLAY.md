@@ -304,3 +304,34 @@ analyzed, that's compatible with dynamic framework navigation or purely
 in-memory UI changes. The **observed click graph** remains the primary
 source of evidence. Avoid re-enabling untrusted site scripts in the offline
 proxy just to make buttons work.
+
+
+## Diagnose disconnected snapshots after a delayed DOM update
+
+An existing capture may contain a valid click edge `3 -> 4`, followed by
+`step-005.html` with `reason: dom-change` on the *same URL*. Earlier
+recorders stored step 5 without any edge from step 4, so later clicks from
+step 5 are unreachable when replay starts at step 1.
+
+Run the existing offline analyzer, without re-recording:
+
+    .venv\Scripts\python.exe navigation_analysis.py ".\recordings\mercadolivre\auto-flow-fixed-20261021T020202Z"
+
+The report's `graph.temporal_dom_candidates` lists conservative,
+same-URL, consecutive DOM-state transitions. It also reports
+`potential_reachable_states` **if** all those candidates were accepted.
+
+**These links are not observed user actions** and never become playable
+button clicks. They may be delayed rendering, animation, polling or unrelated
+background changes. You must inspect the corresponding step screenshots
+and action logs before attaching them to a meaningful interaction.
+
+For new recordings, the recorder also stores DOM settling as
+`kind: dom_settle`, `temporal_observation: true`, `observed: false`
+in `transitions.json`. Action edges remain a separate class with
+`observed: true`.
+
+Do not modify a recorded original transition to call it a verified click
+without supporting action evidence. This diagnostic does not solve missing
+cross-URL navigation, browser back-button capture or server-driven POST
+states; those require a different explicit capture mechanism.
