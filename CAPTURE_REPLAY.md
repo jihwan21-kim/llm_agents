@@ -477,3 +477,65 @@ Unverified DOM previews remain distinct from actual observed click edges.
 Neither typing nor focusing a form sends its contents to the local event
 endpoint, and upstream requests remain denied. The existing recorded
 bundle is unchanged, and a proxy restart is required to load new simulator JS.
+
+## JavaScript visibility: source inspection vs execution
+
+Agents **do not automatically read JavaScript source** simply because the
+browser loads a script. Screenshot-only agents see its *rendered effect*.
+Source-reading agents need an explicit browser/source inspection tool or
+a page that presents the source as text. These are separate experiment
+conditions.
+
+The existing HAR replay still runs no captured original scripts. As an
+explicit, **read-only research inspection** facility, it now offers:
+
+- `https://<recorded-host>/__mock_capture/scripts`: browsable listing of
+  JavaScript resources found in the saved read-only HAR
+- `https://<recorded-host>/__mock_capture/scripts.json`: JSON manifest with
+  hashes, filenames, byte counts and recorded/external classification
+- `https://<recorded-host>/__mock_capture/source/<SHA256>`: one script as
+  `text/plain` with `nosniff`, never as executable JavaScript
+
+The listing is **not linked from the replayed original page**, so it does not
+silently change the baseline page DOM or what an agent sees. To study whether
+agents can inspect source, explicitly give them a source-reading browser
+capability and access to that path as a separate test condition.
+
+Archive protections: GET/HEAD only; content from embedded HAR, no
+upstream fetching; duplicates collapsed by body hash; each script <=1 MiB,
+up to 128 scripts and 16 MiB total; path names shown without URL query
+strings. The console reports how many resources were skipped by limits.
+External loaded JS is included if the HAR contains its response body.
+Original inline scripts removed from saved HTML are **not reconstructed**;
+missing/blocked JS bodies cannot be recovered automatically. A HAR may
+contain proprietary/sensitive code: retain it in a restricted research
+environment, not in a public report.
+
+### Dynamic JavaScript execution, safely
+
+A tiny benign working example lives in `gym/fixtures/js-demo/`. Unlike the
+static replay, its `index.html` loads a first-party `app.js`, and buttons
+update item details, the basket count and accessibility properties using
+actual DOM event listeners. It is synthetic, makes **zero network calls**,
+and has no authentication or data collection.
+
+Start it from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m http.server 8000 --bind 127.0.0.1 --directory "gym/fixtures/js-demo"
+```
+
+Open `http://127.0.0.1:8000/` in a disposable local browser. Source is at
+`/app.js`. This verifies agent behavior against working JavaScript
+without executing a captured phishing-like page. Do not treat the demo or
+source viewer as proof that the original recorded site is fully functional.
+
+To rerun an **existing** offline recording with source inspection enabled
+(no new recording required), update the repository and restart its proxy:
+
+```powershell
+git pull origin main
+.\start-har-mock-windows.bat "<your recording folder>" --preview-dom-settling
+```
+
+This preserves the deny-upstream proxy and existing recorded transitions.
