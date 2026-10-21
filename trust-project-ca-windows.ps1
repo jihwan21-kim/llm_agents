@@ -8,7 +8,7 @@ if (-not (Test-Path -LiteralPath $certPath -PathType Leaf)) {
   Write-Host $certPath
   exit 1
 }
-$cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certPath)
+$cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($certPath)
 $thumbprint = $cert.Thumbprint.ToUpperInvariant()
 $installed = Get-ChildItem Cert:\CurrentUser\Root | Where-Object { $_.Thumbprint -eq $thumbprint }
 Write-Host "Project CA certificate: $certPath"
