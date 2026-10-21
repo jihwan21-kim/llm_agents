@@ -28,6 +28,8 @@ class MockProxy:
   row={'time':datetime.now(timezone.utc).isoformat(),
        'kind':kind,'message_id':message_id,
        'upstream_sent':False,'synthetic_inbox':True}
+  if kind=='link_click':
+   row['target_host']=self.mailbox.resolve(message_id).split('/')[2]
   self.mail_events.append(row)
   del self.mail_events[:-1000]
   with self.logfile.open('a',encoding='utf-8') as f:
@@ -72,8 +74,13 @@ class MockProxy:
     body,mime=local
     return self.reply(flow,200,body if q.method=='GET' else b'',mime)
    return self.reply(flow,404,b'{"error":"not_found"}')
-  if q.host==HOST and path=='/__mock/mail-events' and q.method=='GET':
-   return self.reply(flow,200,json.dumps(self.mail_events).encode('utf-8'))
+  if q.host==HOST and path=='/__mock/mail-events':
+   if q.method=='GET':
+    return self.reply(flow,200,json.dumps(self.mail_events).encode('utf-8'))
+   if q.method=='DELETE':
+    self.mail_events.clear()
+    return self.reply(flow,200,b'{}')
+   return self.reply(flow,405,b'{"error":"method_not_allowed"}')
   if q.host==HOST and path=='/__mock/sites' and q.method=='GET':
    return self.reply(flow,200,json.dumps([{'id':s['id'],'title':s['title'],'host':s['host'],'entry':s['entry']} for s in SITES.values()]).encode())
   if path=='/__mock/events':
