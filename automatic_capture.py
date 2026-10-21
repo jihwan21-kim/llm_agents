@@ -26,28 +26,42 @@ EVENT_SCRIPT = r"""
   if (window.__mockAutoCapture) return;
   window.__mockAutoCapture = true;
   const emit = e => console.log("__MOCK_AUTO_EVENT__" + JSON.stringify(e));
+  // Many JS-driven sites use clickable DIV/SPAN elements instead of BUTTON.
+  // Capture all non-input clicks, preferring a stable interactive ancestor,
+  // so we can replay the observed choice rather than any arbitrary button.
+  const interactive = "button, a, label, summary, select, input[type=submit], input[type=button], [role=button], [onclick], [tabindex], [data-testid]";
+  const elementFor = event => {
+    const path = event.composedPath?.() || [];
+    return path.find(item => item instanceof Element)
+      || (event.target instanceof Element ? event.target : null);
+  };
   const selector = node => {
     if (!(node instanceof Element)) return "";
-    const item = node.closest("button, a, input[type=submit], input[type=button], select, [role=button], form") || node;
-    if (item.id && /^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/.test(item.id)) return "#" + item.id;
+    const item = node.closest(interactive) || node;
+    if (item.id && /^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/.test(item.id))
+      return "#" + item.id;
     const attr = item.getAttribute("data-testid");
     if (attr && /^[a-zA-Z0-9_-]{1,79}$/.test(attr))
       return '[data-testid="' + attr + '"]';
+    // The path is a fallback only. The replay uses the same selector on the
+    // saved DOM and logs unmatched actions rather than inventing transitions.
     const path = [];
     let el = item;
-    while (el && el.nodeType === 1 && el !== document.documentElement && path.length < 12) {
+    while (el && el.nodeType === 1 && el !== document.documentElement && path.length < 18) {
       const tag = el.tagName.toLowerCase();
       const peers = el.parentElement
         ? Array.from(el.parentElement.children).filter(x => x.tagName === el.tagName) : [];
-      path.unshift(tag + (peers.length > 1 ? ":nth-of-type(" + (peers.indexOf(el) + 1) + ")" : ""));
+      path.unshift(tag + (peers.length > 1
+        ? ":nth-of-type(" + (peers.indexOf(el) + 1) + ")" : ""));
       el = el.parentElement;
     }
     return path.join(" > ");
   };
   document.addEventListener("click", e => {
-    const el = e.target instanceof Element
-      ? e.target.closest("button, a, input[type=submit], input[type=button], [role=button]") : null;
-    if (el) emit({kind:"click", selector:selector(el), tag:el.tagName.toLowerCase()});
+    const el = elementFor(e);
+    if (!el || el.closest("input[type=password], textarea, [contenteditable]")) return;
+    const picked = el.closest(interactive) || el;
+    emit({kind:"click", selector:selector(picked), tag:picked.tagName.toLowerCase()});
   }, true);
   document.addEventListener("submit", e => {
     emit({kind:"submit", selector:selector(e.target), tag:"form"});
