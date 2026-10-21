@@ -1,3 +1,13 @@
+## Let an agent read captured site JavaScript (without executing it)
+
+Start your existing HAR mock with `--agent-js-inspection` to show an
+explicit, clickable **read-only original JS** link in the mock page.
+The agent can inspect the actual saved HAR source bytes at the listing and
+source URLs, but no captured script becomes executable. This is a separate
+research condition, not an unmodified site replay.
+
+[Windows commands and agent instructions](gym/AGENT_JS_INSPECTION.md).
+
 ## Functional Replay: site-specific JavaScript + local API (reviewed fixtures)
 
 Generate and run an approved site-specific JavaScript mock in one step with\n`.\\generate-site-mock-windows.bat study-board` or `js-demo`. This works\nwith reviewed first-party sources, not arbitrary URL/phishing recordings.\n\nUse [Functional Replay Mode](gym/FUNCTIONAL_REPLAY.md) to run two
