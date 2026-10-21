@@ -362,7 +362,8 @@ class SnapshotSanitizer(HTMLParser):
 
 
 class CaptureReplay:
-    def __init__(self, directory, preview_dom_settling=False, trusted_fixture_js=False):
+    def __init__(self, directory, preview_dom_settling=False, trusted_fixture_js=False,
+                 agent_js_inspection=False):
         self.directory = Path(directory).expanduser().resolve(strict=True)
         self.bundle = json.loads((self.directory / "bundle.json").read_text(encoding="utf-8"))
         self.start_url = self.bundle.get("startUrl", "")
@@ -371,6 +372,8 @@ class CaptureReplay:
             raise ValueError("Invalid startUrl in bundle")
         self.host = parsed.hostname.lower()
         self.trusted_fixture_js = bool(trusted_fixture_js)
+        # Source-visible experiment condition. Ordinary replay remains unchanged.
+        self.agent_js_inspection = bool(agent_js_inspection)
         self.trusted_js_urls = {}
         self.trusted_js_sources = {}
         if self.trusted_fixture_js:
@@ -454,6 +457,8 @@ class CaptureReplay:
                     "id": digest, "name": basename,
                     "origin": ("recorded" if urlsplit(url).hostname == self.host
                                else "external"), "bytes": len(raw),
+                    "source_url": SCRIPT_SOURCE + digest,
+                    "path": src_path[:200],
                 }
                 self.script_sources[digest] = raw
                 self.script_index.append(entry_data)
@@ -559,8 +564,21 @@ class CaptureReplay:
                 f'<script src="{SIMULATOR}" data-step="{index}" '
                 f'data-transitions="{transitions_attr}"{preview_attr}></script>')
             page = "".join(parser.result)
-            page = (page.replace("</body>", shim + "</body>", 1)
-                    if "</body>" in page else page + shim)
+            # Opt-in, visibly labeled research source access. No captured JS
+            # executes; adding this link creates a DISTINCT study condition.
+            # Never silently expose it in the normal fidelity baseline.
+            source_link = (
+                '<aside id="mock-research-source-link" role="note" '
+                'style="position:fixed;bottom:12px;right:12px;z-index:2147483647;'
+                'background:#fff;color:#111;border:2px solid #333;padding:8px;'
+                'font:14px sans-serif">Research mode: '
+                f'<a href="{SCRIPT_INDEX}">Inspect recorded JavaScript (read-only)</a>'
+                '</aside>'
+                if self.agent_js_inspection else ""
+            )
+            append = shim + source_link
+            page = (page.replace("</body>", append + "</body>", 1)
+                    if "</body>" in page else page + append)
             self.pages[index] = page.encode("utf-8")
 
     def respond(self, method, path, query=""):
@@ -584,7 +602,9 @@ class CaptureReplay:
             rows = "".join(
                 '<li><a href="' + SCRIPT_SOURCE + item["id"] + '">' +
                 html.escape(item["name"]) + "</a> (" +
-                item["origin"] + ", " + str(item["bytes"]) + " bytes)</li>"
+                item["origin"] + ", " + str(item["bytes"]) + " bytes; path: <code>" +
+                html.escape(item["path"]) + "</code>; sha256: <code>" +
+                item["id"] + "</code>)</li>"
                 for item in self.script_index
             )
             markup = (
