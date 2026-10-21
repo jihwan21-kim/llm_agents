@@ -180,3 +180,19 @@ Clicks within cross-origin frames, separate pop-up windows or navigation
 blocked by the recorder's read-only network guard may still be unrecorded.
 Only user-observed transitions can be replayed. Do not disable the guard
 or provide genuine account credentials to force an inaccessible screen.
+
+
+## Why the first replay screen may not be step 0
+
+The recorder starts at DOMContentLoaded, when many sites are still rendering.
+It can save several automatic DOM-only snapshots before a user action.
+An original recording with only an edge such as `23 -> 24 change` has
+no observed action edges from steps 0 through 22.
+
+For the initial entry URL, the replay now shows the source state of the
+first observed click, submit or change recorded on that same path. The
+runner prints `Initial displayed state: N`. You may still inspect exact
+screens with `?__mock_step=0` etc.
+
+This is a best-effort entry-state selection, not a reconstruction of missing
+actions. Previously unrecorded clicks cannot be inferred from HAR alone.
