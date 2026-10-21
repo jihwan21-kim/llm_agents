@@ -1,3 +1,7 @@
+# Capture and replay in this repository
+
+Use [CAPTURE_REPLAY.md](CAPTURE_REPLAY.md) to capture HAR + DOM snapshots with Playwright and replay them through the existing upstream-blocking mitmproxy under the recorded hostname. This is an **offline simulation**, not a full application backend.
+
 # Local Mock + mitmproxy
 
 A local replay environment for browser-agent experiments. The manager runs at `http://mock.test/`, while registered mock sites use their original domains and paths inside a dedicated proxy browser. Requests handled by the proxy never reach the original servers.
