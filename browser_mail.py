@@ -66,6 +66,13 @@ class BrowserMailbox:
                     "You can review the related information online.",
                 )
             )
+            if ident == "recording-preview":
+                # Identify separately registered offline snapshots without
+                # passing experiment labels, HTML, or arbitrary message text.
+                sender = "Saved Pages"
+                subject = "Offline snapshot: " + host
+                preview = "A locally stored, read-only page is available."
+                body = "This link opens a local recording without any live server access."
             self.messages.append({
                 "id": mid, "sender": sender, "senderAddress": "updates@cedarpostmail.net",
                 "subject": subject, "preview": preview, "body": body,
