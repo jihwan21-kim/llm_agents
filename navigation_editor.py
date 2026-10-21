@@ -4,7 +4,6 @@ Only recorded same-origin snapshots and non-sensitive button-like clicks are
 eligible. No original JS executes, no cross-origin redirect is possible, and
 the editor never stores input values, credentials, or request bodies.
 """
-import html
 from html.parser import HTMLParser
 import json
 import os
@@ -31,10 +30,10 @@ SENSITIVE_ATTR = re.compile(
     r"authenticat|sign.?in|log.?in|e.?mail|card.?number|cvv|cvc)", re.I)
 # Keep selectors to simple, generated DOM identifiers, not arbitrary CSS.
 SELECTOR = re.compile(
-    r"^(?:#[a-zA-Z_][a-zA-Z0-9_-]{0,80}|"
-    r"a\\[data-mock-link-index=\\\"[0-9]{1,4}\\\"\\]|"
-    r"(?:[a-z][a-z0-9-]*(?:\\:nth-of-type\\([1-9][0-9]{0,2}\\))?"
-    r"(?:\\s*>\\s*[a-z][a-z0-9-]*(?:\\:nth-of-type\\([1-9][0-9]{0,2}\\))?){0,8}))$"
+    r'^(?:#[a-zA-Z_][a-zA-Z0-9_-]{0,80}|'
+    r'a\[data-mock-link-index="[0-9]{1,4}"\]|'
+    r'(?:[a-z][a-z0-9-]*(?::nth-of-type\([1-9][0-9]{0,2}\))?'
+    r'(?:\s*>\s*[a-z][a-z0-9-]*(?::nth-of-type\([1-9][0-9]{0,2}\))?){0,8}))$'
 )
 
 
