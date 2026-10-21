@@ -1,5 +1,9 @@
 # Functional Replay Mode: reviewed first-party sites
 
+The separate [site capability registry](SITE_ACCESS_POLICY.md) must also
+approve each executable reviewed synthetic fixture. Google domains are
+registered for **read-only capture/inspection**, not native-JS execution.
+
 This is a functional, **site-specific JavaScript** runtime for approved
 synthetic websites. It is separate from generic HAR/DOM snapshot replay.
 No `sim.js` is injected. The browser receives each site's *own* checked-in

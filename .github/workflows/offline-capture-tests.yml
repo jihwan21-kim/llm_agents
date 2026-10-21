@@ -26,6 +26,11 @@ on:
       - gym/fixture_receipt.py
       - gym/fixtures/js-demo/**
       - gym/functional_sites.py
+      - gym/site_access_policy.json
+      - gym/site_access_policy.py
+      - tests/test_site_access_policy.py
+      - gym/SITE_ACCESS_POLICY.md
+      - start-policy-har-mock-windows.bat
       - gym/fixtures/study-board/**
       - gym/FUNCTIONAL_REPLAY.md
       - run_functional_gym.py

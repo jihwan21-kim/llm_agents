@@ -74,6 +74,11 @@ class FunctionalSite:
         self.host = config["host"]
         if not self.host.endswith(".test") or self.host == "mock.test":
             raise ValueError("Fixture must use reserved .test origin")
+        # A distinct checked-in capability policy must explicitly allow the
+        # reviewed synthetic site. A JSON entry alone can never approve
+        # executable JavaScript from arbitrary captured public websites.
+        from gym.site_access_policy import require_site_mode
+        require_site_mode(self.host, "native_js", fixture_id=name)
         self.root = (ROOT / config["root"]).resolve(strict=True)
         if not self.root.is_relative_to((ROOT / "gym/fixtures").resolve()):
             raise ValueError("Fixture path outside reviewed source tree")
