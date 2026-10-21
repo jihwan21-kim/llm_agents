@@ -1,4 +1,4 @@
-"""Serve only saved mock pages. Never open an upstream server connection."""
+"""Serve saved mock pages while allowing only the agent control API upstream."""
 from pathlib import Path
 import json,base64
 from datetime import datetime,timezone
@@ -6,6 +6,7 @@ from mitmproxy import http
 from browser_mail import MAIL_HOST, MAIL_URL, BrowserMailbox, serve_static
 ROOT=Path(__file__).resolve().parent
 HOST='mock.test'
+AGENT_API_HOSTS={'api.openai.com'}
 SITES={s['host']:s for s in json.loads((ROOT/'sites.json').read_text(encoding='utf-8'))['sites']}
 class MockProxy:
  def __init__(self):
@@ -15,6 +16,8 @@ class MockProxy:
   self.logdir=ROOT/'logs';self.logdir.mkdir(exist_ok=True)
   self.logfile=self.logdir/('requests-'+datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')+'.jsonl')
  def server_connect(self,data):
+  host=(data.server.address[0] if data.server.address else '').lower()
+  if host in AGENT_API_HOSTS:return
   data.server.error='Research mock: all upstream connections denied'
  def requestheaders(self,flow):
   flow.request.stream=False
@@ -35,6 +38,8 @@ class MockProxy:
   with self.logfile.open('a',encoding='utf-8') as f:
    f.write(json.dumps(row)+'\n')
  def request(self,flow):
+  if flow.request.host.lower() in AGENT_API_HOSTS and flow.request.port==443:
+   return  # Pass through the AI extension's control-plane traffic.
   try:self.handle(flow)
   except Exception:
    self.reply(flow,500,b'{"error":"local processing failed; upstream denied"}')
