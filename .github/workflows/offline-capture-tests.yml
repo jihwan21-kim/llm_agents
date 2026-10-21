@@ -14,6 +14,9 @@ on:
       - gym/build_js_fixture_recording.py
       - tests/test_action_settling.py
       - tests/test_recorded_js_sources.py
+      - tests/test_agent_js_source_inspection.py
+      - gym/AGENT_JS_INSPECTION.md
+      - start-har-mock-windows.bat
       - tests/test_js_dom_fixture.py
       - tests/test_fixture_receipt.py
       - gym/fixture_receipt.py
