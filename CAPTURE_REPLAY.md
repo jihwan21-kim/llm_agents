@@ -455,3 +455,25 @@ recorded original host remains offline-only at replay; do not use real
 credentials or remove upstream blocking. For server-dependent flows,
 exercise the logic against a fully controlled fixture with synthetic
 responses rather than a live phishing-like origin.
+
+## Text input focus and DOM preview
+
+The opt-in `--preview-dom-settling` mode previously performed a timed
+`location.replace` to a same-URL snapshot even on editable screens.
+Clicking an email field immediately after a screen appeared could therefore
+look like a reload and destroy focus. The generic click listener could also
+consider a text input a descendant of a broad recorded click selector.
+
+The local simulator now:
+- never treats focusing or clicking an ordinary text field, textarea, or
+  dropdown as a synthetic button click (actual `change` events remain separate)
+- cancels unverified timed preview navigation once an editable field gains focus
+- avoids timed preview when an editable *text* field exists in the page's main
+  content; this prevents unintended login/form refreshes
+- preserves the prior auto-preview behavior for a product/cart screen
+  without a main-content text field, such as cart loading state S2 to S3
+
+Unverified DOM previews remain distinct from actual observed click edges.
+Neither typing nor focusing a form sends its contents to the local event
+endpoint, and upstream requests remain denied. The existing recorded
+bundle is unchanged, and a proxy restart is required to load new simulator JS.
