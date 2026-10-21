@@ -3,12 +3,15 @@ from pathlib import Path
 import json,base64
 from datetime import datetime,timezone
 from mitmproxy import http
+from browser_mail import MAIL_HOST, MAIL_URL, BrowserMailbox, serve_static
 ROOT=Path(__file__).resolve().parent
 HOST='mock.test'
 SITES={s['host']:s for s in json.loads((ROOT/'sites.json').read_text(encoding='utf-8'))['sites']}
 class MockProxy:
  def __init__(self):
   self.events=[]
+  self.mail_events=[]
+  self.mailbox=BrowserMailbox(SITES.values())
   self.logdir=ROOT/'logs';self.logdir.mkdir(exist_ok=True)
   self.logfile=self.logdir/('requests-'+datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')+'.jsonl')
  def server_connect(self,data):
@@ -21,6 +24,16 @@ class MockProxy:
   q=flow.request
   row={'time':datetime.now(timezone.utc).isoformat(),'method':q.method,'url':q.pretty_url,'headers':list(q.headers.items(multi=True)),'body_base64':base64.b64encode(q.raw_content or b'').decode(),'body_text':q.get_text(strict=False),'outcome':outcome,'upstream_sent':False}
   with self.logfile.open('a',encoding='utf-8') as f:f.write(json.dumps(row,ensure_ascii=False)+'\n')
+ def log_mail_event(self,kind,message_id):
+  row={'time':datetime.now(timezone.utc).isoformat(),
+       'kind':kind,'message_id':message_id,
+       'upstream_sent':False,'synthetic_inbox':True}
+  if kind=='link_click':
+   row['target_host']=self.mailbox.resolve(message_id).split('/')[2]
+  self.mail_events.append(row)
+  del self.mail_events[:-1000]
+  with self.logfile.open('a',encoding='utf-8') as f:
+   f.write(json.dumps(row)+'\n')
  def request(self,flow):
   try:self.handle(flow)
   except Exception:
@@ -28,12 +41,46 @@ class MockProxy:
  def handle(self,flow):
   q=flow.request
   path=q.path.split('?',1)[0]
-  if q.host not in {HOST,*SITES} or q.port not in (80,443):
+  if q.host not in {HOST,MAIL_HOST,*SITES} or q.port not in (80,443):
    self.record_request(flow,'blocked');return self.reply(flow,403,b'{"blocked":true,"upstream_sent":false}')
   if q.headers.get('Origin') not in (None,'http://'+q.host,'https://'+q.host):
    return self.reply(flow,403)
   if q.headers.get('Upgrade'):
    self.record_request(flow,'upgrade_blocked');return self.reply(flow,403)
+  # Browser-only mailbox (ordinary GETs, no email provider or mailbox server).
+  # Unlike legacy form event logs, mail telemetry never saves raw request
+  # bodies, cookies, headers, query strings or text entered on a page.
+  if q.host==MAIL_HOST:
+   if q.method not in ('GET','HEAD'):
+    return self.reply(flow,405,b'{"error":"method_not_allowed"}')
+   if path=='/api/messages':
+    raw=json.dumps(self.mailbox.public_messages()).encode('utf-8')
+    return self.reply(flow,200,raw if q.method=='GET' else b'')
+   if path.startswith('/read/') and path.count('/')==2:
+    mid=path[len('/read/'):]
+    if not self.mailbox.resolve(mid):return self.reply(flow,404,b'{"error":"not_found"}')
+    if q.method=='GET':self.log_mail_event('message_open',mid)
+    return self.reply(flow,200,b'{}')
+   if path.startswith('/open/') and path.count('/')==2:
+    mid=path[len('/open/'):]
+    destination=self.mailbox.resolve(mid)
+    if destination is None:return self.reply(flow,404,b'{"error":"not_found"}')
+    if q.method=='GET':self.log_mail_event('link_click',mid)
+    self.reply(flow,302,b'', 'text/plain; charset=utf-8')
+    flow.response.headers['Location']=destination
+    return
+   local=serve_static(path)
+   if local:
+    body,mime=local
+    return self.reply(flow,200,body if q.method=='GET' else b'',mime)
+   return self.reply(flow,404,b'{"error":"not_found"}')
+  if q.host==HOST and path=='/__mock/mail-events':
+   if q.method=='GET':
+    return self.reply(flow,200,json.dumps(self.mail_events).encode('utf-8'))
+   if q.method=='DELETE':
+    self.mail_events.clear()
+    return self.reply(flow,200,b'{}')
+   return self.reply(flow,405,b'{"error":"method_not_allowed"}')
   if q.host==HOST and path=='/__mock/sites' and q.method=='GET':
    return self.reply(flow,200,json.dumps([{'id':s['id'],'title':s['title'],'host':s['host'],'entry':s['entry']} for s in SITES.values()]).encode())
   if path=='/__mock/events':

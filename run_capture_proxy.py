@@ -14,7 +14,8 @@ from capture_replay import CaptureReplay, SCRIPT_INDEX
 from navigation_editor import (NavigationEditError, EDITOR, EDITOR_JS_PATH,
                                EDITOR_STATE, EDITOR_SAVE, EDITOR_HTML, EDITOR_JS)
 from gym.fixture_receipt import parse_fixture_receipt, FixtureReceiptError
-from proxy_app import MockProxy
+from proxy_app import MockProxy, SITES
+from browser_mail import BrowserMailbox, MAIL_URL
 
 ROOT = Path(__file__).resolve().parent
 CSP = (
@@ -43,8 +44,13 @@ class RecordedMockProxy(MockProxy):
             directory, preview_dom_settling=preview_dom_settling,
             trusted_fixture_js=trusted_fixture_js,
             agent_js_inspection=agent_js_inspection)
-        if self.capture.host in {"mock.test"}:
-            raise ValueError("Cannot shadow manager host")
+        if self.capture.host in {"mock.test", "inbox.cedarpostmail.net"}:
+            raise ValueError("Cannot shadow manager or mailbox host")
+        self.mailbox = BrowserMailbox([
+            *SITES.values(),
+            {"host": self.capture.host, "entry": urlsplit(
+                self.capture.start_url).path or "/", "id": "recorded-page"},
+        ])
         self.capture_events = []
         print(f"Offline replay: {self.capture.host} with "
               f"{len(self.capture.steps)} snapshots and {len(self.capture.assets)} assets",
@@ -282,6 +288,8 @@ async def run(directory, preview_dom_settling=False, trusted_fixture_js=False,
     if edit_navigation:
         print("Visual navigation editor:", parts.scheme + "://" + parts.netloc + EDITOR,
               "(benign screens only; persisted local overrides)", flush=True)
+    print("Browser inbox:", MAIL_URL, flush=True)
+    print("Mailbox click metadata: http://mock.test/__mock/mail-events", flush=True)
     print("Synthetic events: http://mock.test/__mock_capture/events", flush=True)
     await master.run()
 

@@ -8,7 +8,11 @@ const table=document.createElement('table');const tr=document.createElement('tr'
 for(const [k,v] of Object.entries(e.payload||{})){const row=document.createElement('tr');row.append(node('td',k),node('td',typeof v==='object'?JSON.stringify(v):String(v)));table.append(row);}card.append(table);host.append(card);}}
 async function update(){try{const r=await fetch('/__mock/events');if(!r.ok)throw Error();const all=await r.json();const next=all.filter(e=>['simulated_request','blocked_navigation'].includes(e.type));if(JSON.stringify(next)!==JSON.stringify(events)){events=next;render();}document.querySelector('#status').textContent=`${events.length} records · Local logging connected`;}catch{document.querySelector('#status').textContent='Local server disconnected';}}
 setInterval(update,800);render();update();
-document.querySelector('#clear').onclick=async()=>{await fetch('/__mock/events',{method:'DELETE'});await update();};
+document.querySelector('#clear').onclick=async()=>{
+ await fetch('/__mock/events',{method:'DELETE'});
+ await fetch('/__mock/mail-events',{method:'DELETE'});
+ mailboxActivity=[];await update();await updateMailboxActivity();
+};
 document.querySelector('#export').onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify({note:'Locally simulated submissions and blocked link clicks; not captured original network traffic',events},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='submitted-information.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);};
 
 let sites=[];
@@ -17,3 +21,35 @@ fetch('/__mock/sites').then(r=>r.json()).then(data=>{sites=data;for(const s of s
 document.querySelector('#scheme').onchange=drawSites;document.querySelector('#site-filter').onchange=render;
 
 
+
+
+let mailboxActivity=[];
+async function updateMailboxActivity(){
+ try{
+  const result=await fetch('/__mock/mail-events',{cache:'no-store'});
+  if(!result.ok)throw Error('Unavailable');
+  const next=await result.json();
+  if(JSON.stringify(next)===JSON.stringify(mailboxActivity))return;
+  mailboxActivity=next;
+  const holder=document.querySelector('#mail-activity');
+  holder.replaceChildren();
+  if(!next.length){holder.textContent='No inbox activity yet.';return;}
+  const table=document.createElement('table');
+  const header=document.createElement('tr');
+  for(const heading of ['Time','Action','Message','Destination']){
+   header.append(node('th',heading));
+  }
+  table.append(header);
+  for(const item of next.slice(-100).reverse()){
+   const row=document.createElement('tr');
+   row.append(node('td',item.time||''),node('td',item.kind||''),
+     node('td',item.message_id||''),node('td',item.target_host||''));
+   table.append(row);
+  }
+  holder.append(table);
+ }catch{
+  document.querySelector('#mail-activity').textContent='Inbox activity unavailable.';
+ }
+}
+setInterval(updateMailboxActivity,1100);
+updateMailboxActivity();

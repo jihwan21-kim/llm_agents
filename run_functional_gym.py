@@ -18,6 +18,7 @@ from mitmproxy.tools.dump import DumpMaster
 from gym.functional_sites import FunctionalSite, SITES
 from gym.build_approved_mock import load_approved_mock
 from proxy_app import MockProxy
+from browser_mail import BrowserMailbox, MAIL_HOST, MAIL_URL
 
 ROOT = Path(__file__).resolve().parent
 CSP = (
@@ -32,6 +33,12 @@ class FunctionalGymProxy(MockProxy):
     def __init__(self, site, generated=False):
         super().__init__()
         self.site = (load_approved_mock(site) if generated else FunctionalSite(site))
+        # The functional runner serves a single reviewed synthetic fixture.
+        # Never advertise legacy sites here, because they are not loaded in
+        # this process.
+        self.mailbox = BrowserMailbox([{
+            "host": self.site.host, "entry": "/", "id": "reviewed-fixture"
+        }])
         print("Functional JS gym:", self.site.url, flush=True)
         print("Site-specific JavaScript loaded at /app.js; no generic sim.js",
               flush=True)
@@ -68,7 +75,12 @@ class FunctionalGymProxy(MockProxy):
             self.log_metadata(method, path, "blocked", 403)
             return self.respond(flow, 403, b'{"error":"blocked"}')
 
+        if request.host == MAIL_HOST:
+            return super().handle(flow)
+
         if request.host == "mock.test":
+            if path == "/__mock/mail-events":
+                return super().handle(flow)
             if method != "GET":
                 self.log_metadata(method, path, "manager_denied", 405)
                 return self.respond(flow, 405, b'{"error":"method_not_allowed"}')
@@ -115,7 +127,8 @@ async def run(site, generated=False):
                           body_size_limit="1m")
     addon = FunctionalGymProxy(site, generated=generated)
     master.addons.add(addon)
-    print("Open the dedicated proxy Chrome, then:", addon.site.url, flush=True)
+    print("Browser inbox:", MAIL_URL, flush=True)
+    print("Opened site:", addon.site.url, flush=True)
     print("Events: http://mock.test/__gym/events", flush=True)
     print("Script hashes: http://mock.test/__gym/status", flush=True)
     print("Restart this proxy to reset deterministic fixture state.", flush=True)

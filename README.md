@@ -1,3 +1,23 @@
+## Chrome inbox start page (browser-only)
+
+The dedicated proxy Chrome now starts at
+`https://inbox.cedarpostmail.net/`. This is a local virtual host served
+by mitmproxy, **not** a real email server, mailbox integration, or owned public
+domain. A synthetic inbox provides searchable messages and navigation to
+existing locally served mocks, without displaying research classifications
+or JSON logs. The manager remains at `http://mock.test/`; inbox navigation
+metadata is available at `/__mock/mail-events` on that manager host.
+
+```powershell
+.\start-proxy-windows.bat
+# In another PowerShell:
+.\open-chrome-windows.bat
+```
+
+Open the old manager at startup with `.\open-chrome-windows.bat --manager`.
+Only use fictitious credentials in existing legacy mock-site forms.
+[Windows guide, recording modes and limitations](gym/BROWSER_MAILBOX.md).
+
 ## Visual editor for broken mock buttons
 
 After recording, use
