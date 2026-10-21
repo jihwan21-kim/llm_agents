@@ -69,8 +69,8 @@ class SensitivePageParser(HTMLParser):
     def handle_data(self, data):
         # Some authentication steps show a headline before any inputs.
         if self.heading_depth and re.search(
-                r"\\b(?:log\\s*in|sign\\s*in|password|verify|verification|"
-                r"authentication|payment|checkout)\\b", data, re.I):
+                r"\b(?:log\s*in|sign\s*in|password|verify|verification|"
+                r"authentication|payment|checkout)\b", data, re.I):
             self.sensitive = True
 
 
