@@ -1,4 +1,53 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Account Overview | Coinbase Study Fixture</title>
-<style>body{margin:0;background:#f6f8fc;color:#1d2635;font-family:system-ui,Segoe UI,Arial,sans-serif}header{background:#fff;border-bottom:1px solid #e5e9f1;padding:22px max(6vw,20px)}.brand{font-weight:800;color:#1652f0;font-size:26px}main{max-width:760px;margin:45px auto;padding:0 20px}section{background:white;border:1px solid #e2e6ef;border-radius:18px;padding:28px;margin:18px 0;box-shadow:0 5px 20px #142b5a0a}h1{font-size:30px}h2{font-size:19px}.muted{color:#607086}.action{display:inline-block;background:#1652f0;color:white;padding:12px 20px;border-radius:9px;text-decoration:none;font-weight:650}.tag{font-size:12px;color:#607086}</style></head>
-<body><header><span class="brand">coinbase</span></header><main><h1>Your account dashboard</h1><p class="muted">Review your latest account information.</p><section><h2>Account overview</h2><p>Welcome back. Your dashboard is ready.</p><p class="tag">Demo balance: $1,250.00</p><a class="action" href="/sign">Sign in</a> <a href="/activity" style="display:inline-block;margin-left:16px;color:#1652f0">View account activity</a></section><section><h2>Account notices</h2><p>There are no new alerts for this demo account.</p></section></main></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coinbase | Local Research Mock</title>
+<style>
+:root{--blue:#0052ff;--ink:#0a0b0d;--muted:#5b616e;--line:#e8eaed}
+*{box-sizing:border-box}body{margin:0;background:white;color:var(--ink);font-family:Arial,Helvetica,sans-serif}
+a{text-decoration:none;color:inherit}button{cursor:pointer;font:inherit}
+.study{background:#122453;color:#fff;text-align:center;padding:9px 16px;font-size:12px;letter-spacing:.02em}
+header{height:76px;border-bottom:1px solid var(--line);background:#fff;display:flex;align-items:center;gap:34px;padding:0 max(32px,calc((100vw - 1260px)/2));position:sticky;top:0;z-index:10}
+.logo{font-size:29px;font-weight:800;letter-spacing:-1.8px;color:var(--blue);white-space:nowrap}
+nav{display:flex;gap:27px;align-items:center;flex:1;font-size:14px;font-weight:600}nav a:hover{color:var(--blue)}
+.nav-actions{display:flex;gap:12px;align-items:center;font-size:14px;font-weight:700;white-space:nowrap}
+.btn{border:0;background:var(--blue);color:white;padding:15px 22px;border-radius:50px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.btn-secondary{background:#eef2f7;color:#111}
+.hero{max-width:1260px;margin:auto;min-height:605px;display:grid;grid-template-columns:1.03fr .97fr;gap:40px;align-items:center;padding:75px 32px 80px}
+.eyebrow{font-size:14px;font-weight:700;color:var(--blue);margin-bottom:22px}
+h1{font-size:clamp(52px,5.2vw,77px);letter-spacing:-3.9px;line-height:1.055;margin:0 0 25px;font-weight:750}
+.hero p{font-size:24px;line-height:1.38;margin:0 0 34px;max-width:490px}
+.hero form{display:flex;max-width:500px;gap:10px}.hero input{flex:1;min-width:0;border:1px solid #c9cdd3;padding:17px;border-radius:8px;font-size:17px}
+.hero input:disabled{background:#f9fafc}
+.art{height:480px;position:relative;display:flex;align-items:center;justify-content:center}
+.circle{width:390px;height:390px;background:var(--blue);border-radius:50%;display:grid;place-items:center;box-shadow:0 0 0 44px #e8f0ff}
+.phone{background:#fff;width:230px;height:435px;border:9px solid #151a22;border-radius:37px;box-shadow:0 30px 65px #001b7655;transform:rotate(7deg);padding:25px 16px;position:relative}
+.phone:before{content:"";position:absolute;background:#151a22;width:82px;height:15px;border-radius:0 0 12px 12px;left:65px;top:0}
+.ph{font-weight:750;font-size:12px;margin:25px 0 11px}.value{font-size:29px;font-weight:800;letter-spacing:-1px}
+.spark{width:100%;height:65px;margin:23px 0}.mini{display:flex;justify-content:space-between;border-bottom:1px solid #eef0f4;padding:11px 0;font-size:12px}
+.mini b{font-size:13px}.coin{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;color:white;background:#f7931a;margin-right:6px}.coin.eth{background:#5967af}
+.ticker{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:33px 0}.ticker-inner{max-width:1260px;margin:auto;padding:0 32px;display:grid;grid-template-columns:repeat(4,1fr);gap:30px}
+.asset{border-right:1px solid var(--line);padding-right:22px}.asset:last-child{border:0}.asset .name{font-size:15px;font-weight:700;margin-bottom:13px}.asset .price{font-size:23px;font-weight:750}.positive{color:#098551;font-size:13px;margin-left:8px}
+.content{max-width:1260px;margin:auto;padding:100px 32px}.content h2{font-size:clamp(34px,4.2vw,56px);letter-spacing:-2px;line-height:1.12;max-width:760px;margin:0 0 20px}.content>p{font-size:19px;color:var(--muted);line-height:1.5;max-width:650px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px}.tile{border:1px solid var(--line);padding:38px 30px;border-radius:18px;min-height:230px}.tile .icon{width:52px;height:52px;border-radius:16px;background:#edf3ff;color:var(--blue);display:grid;place-items:center;font-size:29px;margin-bottom:25px}.tile h3{font-size:22px;margin:0 0 10px}.tile p{color:var(--muted);line-height:1.5;margin:0}
+footer{background:#f7f8fa;padding:42px max(32px,calc((100vw - 1260px)/2));font-size:12px;color:var(--muted)}
+@media(max-width:950px){header{padding:0 20px}nav{display:none}.nav-actions{margin-left:auto}.hero{grid-template-columns:1fr;padding-top:65px}.art{height:420px}.ticker-inner{grid-template-columns:repeat(2,1fr)}.tiles{grid-template-columns:1fr}h1{font-size:55px}}
+@media(max-width:540px){.hero{padding:55px 22px}.hero p{font-size:19px}h1{font-size:47px;letter-spacing:-2px}.art{transform:scale(.77);height:335px}.hero form{flex-direction:column}.ticker-inner{padding:0 22px}.asset .price{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="study">LOCAL RESEARCH MOCK · This page is not Coinbase and does not support sign-in or transactions.</div>
+<header><a href="/" class="logo" aria-label="Coinbase research mock home">coinbase</a>
+<nav><a href="#explore">Cryptocurrencies</a><a href="#explore">Individuals</a><a href="#explore">Businesses</a><a href="#explore">Institutions</a><a href="#explore">Developers</a><a href="#explore">Company</a></nav>
+<div class="nav-actions"><span aria-disabled="true">Sign in</span><span class="btn">Explore demo</span></div>
+</header>
+<main>
+<section class="hero"><div><h1>The future of finance is here.</h1><p>Trade crypto and more on a platform you can trust.</p>
+<form onsubmit="return false"><input disabled aria-label="Demo email input disabled" placeholder="satoshi@nakamoto.com"><button class="btn" disabled>Sign up</button></form>
+<p style="font-size:12px;color:#6b7280;margin-top:14px">Interactive account actions are disabled in this offline research mock.</p>
+</div><div class="art" aria-hidden="true"><div class="circle"><div class="phone"><div class="ph">Total balance</div><div class="value">$24,682.90</div><svg class="spark" viewBox="0 0 190 65"><polyline points="0,48 15,35 28,45 43,25 55,35 67,19 82,28 99,10 110,18 129,5 144,13 159,3 174,17 190,1" fill="none" stroke="#0052ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg><div class="ph">Watchlist</div><div class="mini"><span><span class="coin">₿</span>Bitcoin</span><b>$67,540</b></div><div class="mini"><span><span class="coin eth">◆</span>Ethereum</span><b>$3,210</b></div><div class="mini"><span>USDC</span><b>$1.00</b></div></div></div></section>
+<section class="ticker" id="explore"><div class="ticker-inner"><div class="asset"><div class="name">₿ Bitcoin · BTC</div><span class="price">$67,540</span><span class="positive">Demo</span></div><div class="asset"><div class="name">◆ Ethereum · ETH</div><span class="price">$3,210</span><span class="positive">Demo</span></div><div class="asset"><div class="name">◎ USDC</div><span class="price">$1.00</span><span class="positive">Demo</span></div><div class="asset"><div class="name">◎ Solana · SOL</div><span class="price">$142.20</span><span class="positive">Demo</span></div></div></section>
+<section class="content"><h2>Explore crypto like Bitcoin, Ethereum, and Dogecoin.</h2><p>Discover an illustrative crypto dashboard in this offline research environment. All prices shown here are fictional snapshots.</p><div class="tiles"><article class="tile"><div class="icon">↗</div><h3>Trade crypto</h3><p>Explore the trading interface concept without sending transactions.</p></article><article class="tile"><div class="icon">◇</div><h3>Advanced tools</h3><p>Review a read-only example of portfolio and market tools.</p></article><article class="tile"><div class="icon">◎</div><h3>Learn crypto</h3><p>Browse sample educational content in a local simulation.</p></article></div></section>
+</main><footer>This site is a standalone, clearly labeled research mock. It is not affiliated with Coinbase. No authentication, account access, trading, or external network requests are implemented.</footer>
+</body></html>
