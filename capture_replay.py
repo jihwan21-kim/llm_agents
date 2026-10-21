@@ -12,6 +12,7 @@ import mimetypes
 from pathlib import Path
 import re
 from urllib.parse import urljoin, urlsplit, parse_qs
+from navigation_analysis import extract_html_navigation
 
 ASSETS = "/__mock_capture/assets/"
 SIMULATOR = "/__mock_capture/sim.js"
@@ -98,7 +99,12 @@ SIM_JS = r"""
         body: JSON.stringify(payload)
       });
       if (!response.ok) throw Error("Event recording failed");
-      if (edge && edge.outcome === "changed" && edge.to !== step && edge.to_path) {
+      const result = await response.json();
+      // The local proxy validates both real observed edges and unambiguous
+      // same-origin HTML href hints before authorizing local navigation.
+      if (edge && result.to === edge.to && (result.observed || result.static_navigation) &&
+          (edge.outcome === "changed" || edge.outcome === "html-href") &&
+          edge.to !== step && edge.to_path) {
         const url = new URL(edge.to_path, location.origin);
         url.searchParams.set("__mock_step", String(edge.to));
         location.assign(url.pathname + url.search);
@@ -180,6 +186,7 @@ class SnapshotSanitizer(HTMLParser):
         super().__init__(convert_charrefs=False)
         self.page_url = page_url
         self.asset_urls = asset_urls
+        self.link_count = 0
         self.result = []
         self.blocked = []
         self.style_depth = 0
@@ -207,7 +214,7 @@ class SnapshotSanitizer(HTMLParser):
             low = key.lower()
             if low.startswith("on") or low in {
                 "integrity", "nonce", "crossorigin", "formaction", "target",
-                "srcdoc", "ping", "autofocus"}:
+                "srcdoc", "ping", "autofocus", "data-mock-link-index"}:
                 continue
             value = value or ""
             if low in {"src", "href", "poster", "action", "xlink:href", "data"}:
@@ -230,6 +237,10 @@ class SnapshotSanitizer(HTMLParser):
             elif tag == "input" and low == "value":
                 value = ""  # No pre-filled captured credentials.
             out.append(f' {key}="{html.escape(value, quote=True)}"')
+        if tag == "a":
+            # Marker links the inert HTML back to its original anchor index.
+            out.append(f' data-mock-link-index="{self.link_count}"')
+            self.link_count += 1
         self.result.append(f"<{tag}{''.join(out)}>")
         if tag == "style":
             self.style_depth += 1
@@ -324,14 +335,23 @@ class CaptureReplay:
                 self.assets[token] = (rewrite_css(text, url, self.urls).encode(), mime, url)
 
         self.pages = {}
+        self.inferred_edges = []
+        # A path might have many DOM states (SPA, modal). Only infer an HTML
+        # link's destination when a single matching recorded state exists.
+        by_path = {}
+        for i, st in enumerate(self.steps):
+            parsed_step = urlsplit(st.get("url") or self.start_url)
+            if parsed_step.scheme == parsed.scheme and parsed_step.netloc.lower() == parsed.netloc.lower():
+                by_path.setdefault(parsed_step.path or "/", []).append(i)
         for index, step in enumerate(self.steps):
             filename = step.get("html") or ("step-" + str(index).zfill(3) + ".html")
             file = (self.directory / filename).resolve(strict=True)
             if not file.is_relative_to(self.directory):
                 raise ValueError("Snapshot path escapes recording")
             source = step.get("url") or self.start_url
+            raw_page = file.read_text(encoding="utf-8", errors="replace")
             parser = SnapshotSanitizer(source, self.urls)
-            parser.feed(file.read_text(encoding="utf-8", errors="replace"))
+            parser.feed(raw_page)
             parser.close()
             edges = []
             for transition in self.transitions:
@@ -352,6 +372,24 @@ class CaptureReplay:
                     "to_path": target_url.path or "/",
                     "outcome": transition.get("outcome"),
                 })
+            for hint in extract_html_navigation(raw_page, source):
+                if hint["kind"] != "anchor":
+                    continue
+                dests = by_path.get(hint["target_path"], [])
+                if len(dests) != 1 or dests[0] == index:
+                    continue
+                # Explicitly distinguish inferred anchor navigation from
+                # browser-observed clicks. Not usable to claim task success.
+                proposed = {
+                    "kind": "click", "selector": hint["selector"],
+                    "observed": False, "to": dests[0],
+                    "to_path": hint["target_path"],
+                    "outcome": "html-href", "source": "html_href",
+                }
+                if not any(e["selector"] == proposed["selector"]
+                           and e["kind"] == "click" for e in edges):
+                    edges.append(proposed)
+                    self.inferred_edges.append({"from": index, **proposed})
             # Legacy manual recordings do not contain action-to-state edges.
             # They remain inspectable through __mock_step, but no longer advance
             # to an arbitrary next screen on unrelated button clicks.
