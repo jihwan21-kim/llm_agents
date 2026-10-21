@@ -26,9 +26,11 @@ event marked as not observed. For branching flows, return to the earlier
 page in the recording browser and capture the alternative path. Changing
 input values may produce additional states that must be recorded separately.
 
-Browser interactions with the live source can still send requests to the
-source site while RECORDING. Do not test submission with real data. Record only
-authorized research workflows in a disposable isolated VM.
+The automatic recorder blocks live POST/PUT/PATCH/DELETE requests by default.
+GET/HEAD/OPTIONS are still sent to load the source page and its static assets.
+Consequently, server-driven transitions after a blocked write cannot be
+captured as genuine downstream states. Record only authorized workflows in
+a disposable isolated VM; never input real credentials or payment details.
 
 ## Features
 
