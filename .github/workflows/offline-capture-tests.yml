@@ -10,6 +10,8 @@ on:
       - run_capture_proxy.py
       - record_site.py
       - tests/test_capture_replay.py
+      - tests/test_trusted_fixture_replay.py
+      - gym/build_js_fixture_recording.py
       - tests/test_action_settling.py
       - tests/test_recorded_js_sources.py
       - tests/test_js_dom_fixture.py
