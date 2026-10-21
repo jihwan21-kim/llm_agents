@@ -11,6 +11,8 @@ from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from capture_replay import CaptureReplay, SCRIPT_INDEX
+from navigation_editor import (NavigationEditError, EDITOR, EDITOR_JS_PATH,
+                               EDITOR_STATE, EDITOR_SAVE, EDITOR_HTML, EDITOR_JS)
 from gym.fixture_receipt import parse_fixture_receipt, FixtureReceiptError
 from proxy_app import MockProxy
 
@@ -27,8 +29,16 @@ ALLOWED_FIELDS = {"email", "password", "tel", "number", "other"}
 
 class RecordedMockProxy(MockProxy):
     def __init__(self, directory, preview_dom_settling=False,
-                 trusted_fixture_js=False, agent_js_inspection=False):
+                 trusted_fixture_js=False, agent_js_inspection=False,
+                 edit_navigation=False):
         super().__init__()
+        if edit_navigation and trusted_fixture_js:
+            raise ValueError("Cannot combine navigation editor and trusted JS runtime")
+        self.edit_navigation = bool(edit_navigation)
+        self.replay_settings = dict(
+            preview_dom_settling=preview_dom_settling,
+            trusted_fixture_js=trusted_fixture_js,
+            agent_js_inspection=agent_js_inspection)
         self.capture = CaptureReplay(
             directory, preview_dom_settling=preview_dom_settling,
             trusted_fixture_js=trusted_fixture_js,
@@ -66,7 +76,11 @@ class RecordedMockProxy(MockProxy):
             "Cache-Control": "no-store",
             "X-Mock-Proxy": "offline-no-upstream",
             "X-Content-Type-Options": "nosniff",
-            "Content-Security-Policy": CSP,
+            "Content-Security-Policy": (
+                CSP.replace("frame-src 'none'", "frame-src 'self'")
+                   .replace("frame-ancestors 'none'", "frame-ancestors 'self'")
+                if self.edit_navigation and flow.request.host == self.capture.host
+                else CSP),
         })
 
     def _metadata_log(self, kind, path, method):
@@ -98,6 +112,41 @@ class RecordedMockProxy(MockProxy):
         }:
             self._metadata_log("capture_origin_blocked", path, request.method)
             return self._respond(flow, 403, b"Blocked")
+
+        if self.edit_navigation and path in {
+            EDITOR, EDITOR_JS_PATH, EDITOR_STATE, EDITOR_SAVE
+        }:
+            if path == EDITOR_SAVE:
+                if (request.method != "POST" or
+                        request.headers.get("Origin") !=
+                        "https://" + self.capture.host):
+                    return self._respond(flow, 403, b"Editor write denied")
+                if request.headers.get("Content-Type", "").split(";", 1)[0].lower() != "application/json":
+                    return self._respond(flow, 415, b"JSON required")
+                try:
+                    self.capture.navigation_editor.write(request.raw_content or b"")
+                    # Rebuild the pages; do not alter bundle.json or HAR.
+                    self.capture = CaptureReplay(
+                        self.capture.directory, **self.replay_settings)
+                except (NavigationEditError, ValueError, OSError) as exc:
+                    self._metadata_log("editor_rejected", path, "POST")
+                    return self._respond(flow, 400, json.dumps({
+                        "error": str(exc)[:180]
+                    }).encode(), "application/json; charset=utf-8")
+                self._metadata_log("editor_saved", path, "POST")
+                return self._respond(flow, 200, b'{"saved":true}',
+                                     "application/json; charset=utf-8")
+            if request.method not in {"GET", "HEAD"}:
+                return self._respond(flow, 405, b"Editor is read-only for this method")
+            if path == EDITOR:
+                data, mime = EDITOR_HTML.encode(), "text/html; charset=utf-8"
+            elif path == EDITOR_JS_PATH:
+                data, mime = EDITOR_JS.encode(), "text/javascript; charset=utf-8"
+            else:
+                data = json.dumps(self.capture.navigation_editor.state(
+                    self.capture.initial_step)).encode()
+                mime = "application/json; charset=utf-8"
+            return self._respond(flow, 200, data if request.method == "GET" else b"", mime)
 
         if path == "/__mock_capture/fixture-receipt":
             # Only the packaged trusted demo may post fixed, non-sensitive
@@ -176,12 +225,18 @@ class RecordedMockProxy(MockProxy):
                 and edge["outcome"] == "html-href"
                 for edge in self.capture.inferred_edges
             ) if payload["kind"] == "button_click" else False
-            allowed = observed or static_navigation
+            manual_navigation = any(
+                item["from"] == step and item["to"] == target
+                and item["selector"] == selector
+                for item in self.capture.manual_edges
+            ) if payload["kind"] == "button_click" else False
+            allowed = observed or static_navigation or manual_navigation
             event = {"time": datetime.now(timezone.utc).isoformat(),
                      "kind": payload["kind"], "step": step,
                      "to": target if allowed else step,
                      "observed_transition": observed,
                      "static_navigation": static_navigation,
+                     "manual_navigation": manual_navigation,
                      "filled_types": kinds, "upstream_sent": False,
                      "simulated": True}
             self.capture_events.append(event)
@@ -189,6 +244,7 @@ class RecordedMockProxy(MockProxy):
             self._metadata_log("capture_simulated_event", path, "POST")
             return self._respond(flow, 200, json.dumps({"recorded": True, "observed": observed,
                                                        "static_navigation": static_navigation,
+                                                       "manual_navigation": manual_navigation,
                                                        "to": target if allowed else step}).encode(),
                                  "application/json; charset=utf-8")
 
@@ -203,7 +259,7 @@ class RecordedMockProxy(MockProxy):
 
 
 async def run(directory, preview_dom_settling=False, trusted_fixture_js=False,
-              agent_js_inspection=False):
+              agent_js_inspection=False, edit_navigation=False):
     options = Options(listen_host="127.0.0.1", listen_port=8080,
                       confdir=str(ROOT / "mitm-ca"))
     master = DumpMaster(options)
@@ -211,7 +267,8 @@ async def run(directory, preview_dom_settling=False, trusted_fixture_js=False,
                           stream_large_bodies=None, body_size_limit="1m")
     addon = RecordedMockProxy(directory, preview_dom_settling=preview_dom_settling,
                               trusted_fixture_js=trusted_fixture_js,
-                              agent_js_inspection=agent_js_inspection)
+                              agent_js_inspection=agent_js_inspection,
+                              edit_navigation=edit_navigation)
     master.addons.add(addon)
     print("Dedicated proxy browser only. All upstream connections are DENIED.", flush=True)
     print("Open recorded URL:", addon.capture.start_url, flush=True)
@@ -222,6 +279,9 @@ async def run(directory, preview_dom_settling=False, trusted_fixture_js=False,
     if agent_js_inspection:
         print("RESEARCH SOURCE-VISIBLE MODE: Page includes a visible source index link.", flush=True)
         print("Never use this condition as an unmodified page-fidelity baseline.", flush=True)
+    if edit_navigation:
+        print("Visual navigation editor:", parts.scheme + "://" + parts.netloc + EDITOR,
+              "(benign screens only; persisted local overrides)", flush=True)
     print("Synthetic events: http://mock.test/__mock_capture/events", flush=True)
     await master.run()
 
@@ -237,10 +297,13 @@ if __name__ == "__main__":
     parser.add_argument("--agent-js-inspection", action="store_true",
                         help="Show a visible link to byte-preserved HAR JS sources; "
                              "sources remain text-only and unexecuted")
+    parser.add_argument("--edit-navigation", action="store_true",
+                        help="Enable the visual editor for benign recorded navigation")
     args = parser.parse_args()
     try:
         asyncio.run(run(args.recording, preview_dom_settling=args.preview_dom_settling,
                         trusted_fixture_js=args.trusted_fixture_js,
-                        agent_js_inspection=args.agent_js_inspection))
+                        agent_js_inspection=args.agent_js_inspection,
+                        edit_navigation=args.edit_navigation))
     except KeyboardInterrupt:
         pass

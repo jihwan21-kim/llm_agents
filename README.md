@@ -1,3 +1,18 @@
+## Visual editor for broken mock buttons
+
+After recording, use
+`.\\start-navigation-editor-windows.bat "<recording-folder>"`.
+Open `https://<recorded-host>/__mock_capture/editor` in the dedicated
+Chrome profile. Pick the source recorded screen, **click the button in the
+preview**, select a destination recorded screen, then save. The correction is
+persisted in `navigation-overrides.json` and used by subsequent static
+mock replays, without editing the original HAR or `bundle.json`.
+
+Only benign, already-recorded same-origin screens can be connected.
+Authentication and payment workflows remain locked. Manual mappings are
+labeled separately from originally observed transitions.
+[Windows instructions and limitations](gym/NAVIGATION_EDITOR.md).
+
 ## Site allowlist and Google recording policy
 
 `gym/site_access_policy.json` holds explicit per-host capabilities. Google

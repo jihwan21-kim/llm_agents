@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 from urllib.parse import urljoin, urlsplit, parse_qs
 from navigation_analysis import extract_html_navigation, temporal_dom_candidates
+from navigation_editor import NavigationEditor
 
 ASSETS = "/__mock_capture/assets/"
 SIMULATOR = "/__mock_capture/sim.js"
@@ -131,6 +132,9 @@ SIM_JS = r"""
       const distance = distanceToAncestor(el, a.ancestor)
                      - distanceToAncestor(el, b.ancestor);
       if (distance) return distance;
+      // A saved manual mapping replaces the recorded guess for the same control.
+      if (a.edge.manual_override !== b.edge.manual_override)
+        return Number(b.edge.manual_override) - Number(a.edge.manual_override);
       const specificity = b.edge.selector.length - a.edge.selector.length;
       if (specificity) return specificity;
       return Number(b.edge.outcome === "changed")
@@ -167,8 +171,10 @@ SIM_JS = r"""
       const result = await response.json();
       // The local proxy validates both real observed edges and unambiguous
       // same-origin HTML href hints before authorizing local navigation.
-      if (edge && result.to === edge.to && (result.observed || result.static_navigation) &&
-          (edge.outcome === "changed" || edge.outcome === "html-href") &&
+      if (edge && result.to === edge.to &&
+          (result.observed || result.static_navigation || result.manual_navigation) &&
+          (edge.outcome === "changed" || edge.outcome === "html-href" ||
+           edge.outcome === "manual_navigation") &&
           edge.to !== step && edge.to_path) {
         const url = new URL(edge.to_path, location.origin);
         url.searchParams.set("__mock_step", String(edge.to));
@@ -386,6 +392,10 @@ class CaptureReplay:
         self.transitions = self.bundle.get("transitions", [])
         if not self.steps:
             raise ValueError("No recorded HTML snapshots")
+        # Saved click fixes are not changes to the recorded evidence. The
+        # editor rejects sensitive authentication/payment states.
+        self.navigation_editor = NavigationEditor(self.directory, self.bundle)
+        self.manual_edges = list(self.navigation_editor.overrides)
         self.preview_dom_settling = bool(preview_dom_settling)
         # Only time-adjacent, same-URL, previously recorded DOM states.
         # Not verified user actions. The default remains strict replay.
@@ -551,6 +561,16 @@ class CaptureReplay:
                            and e["kind"] == "click" for e in edges):
                     edges.append(proposed)
                     self.inferred_edges.append({"from": index, **proposed})
+            for manual in self.manual_edges:
+                if manual["from"] != index:
+                    continue
+                dest = manual["to"]
+                edges.append({
+                    "kind": "click", "selector": manual["selector"],
+                    "observed": False, "manual_override": True,
+                    "to": dest, "to_path": self.navigation_editor.states[dest]["path"],
+                    "outcome": "manual_navigation",
+                })
             # Legacy manual recordings do not contain action-to-state edges.
             # They remain inspectable through __mock_step, but no longer advance
             # to an arbitrary next screen on unrelated button clicks.
