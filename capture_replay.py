@@ -26,6 +26,19 @@ SIM_JS = r"""
   try { edges = JSON.parse(config.transitions || "[]"); }
   catch (err) { console.error("Invalid recorded transition data", err); }
   let busy = false;
+  // Focusing an editable field is never navigation. Recording input content
+  // is deliberately unsupported by the offline mock.
+  const EDITABLE_FIELD = "input:not([type=submit]):not([type=button]):" +
+    "not([type=reset]):not([type=image]):not([type=checkbox]):" +
+    "not([type=radio]), textarea, select, [contenteditable]:not([contenteditable=false])";
+  const MAIN_TEXT_FIELD = "main input:not([type=hidden]):not([type=submit]):" +
+    "not([type=button]):not([type=checkbox]):not([type=radio]), " +
+    "main textarea, [role=main] input:not([type=hidden]), [role=main] textarea";
+  let editingStarted = false;
+  document.addEventListener("focusin", event => {
+    if (event.target instanceof Element && event.target.closest(EDITABLE_FIELD))
+      editingStarted = true;
+  }, true);
 
   // Research-only preview: this DOM update was NOT attributed to any click.
   // An explicit local-only flag must enable this. The delay is a display
@@ -35,6 +48,16 @@ SIM_JS = r"""
   if (domSettleTo !== null && Number.isSafeInteger(domSettleTo) &&
       domSettleTo !== step && domSettleTo > step) {
     window.setTimeout(() => {
+      // DOM settling is not a verified click. Never replace an active form
+      // just as the user focuses it, and don't silently refresh full
+      // editable screens (e.g. a login screen with an input under main).
+      if (editingStarted ||
+          document.activeElement?.closest?.(EDITABLE_FIELD) ||
+          document.querySelector(MAIN_TEXT_FIELD)) {
+        console.info("[offline mock] Held unverified DOM settling on editable screen",
+                     {from: step, to: domSettleTo});
+        return;
+      }
       console.info("[offline mock] Previewing unverified DOM settling",
                    {from: step, to: domSettleTo});
       const next = new URL(location.pathname, location.origin);
@@ -136,6 +159,9 @@ SIM_JS = r"""
     const target = chain.find(el => el instanceof Element)
       || (event.target instanceof Element ? event.target : null);
     if (!target) return;
+    // Input focus is not a button click. Ignore it even if an overly broad
+    // captured selector matches an ancestor such as main or form.
+    if (target.closest(EDITABLE_FIELD)) return;
     // Capture every observed click target, including DIV/SPAN handlers.
     // Captured scripts and original external navigation remain disabled.
     const edge = bestEdge(target, "click");
