@@ -1,7 +1,7 @@
 name: Offline capture replay tests
 on:
   push:
-    branches: [feature/unified-capture-mitm-replay]
+    branches: [main, feature/unified-capture-mitm-replay]
   pull_request:
     paths:
       - capture_replay.py
