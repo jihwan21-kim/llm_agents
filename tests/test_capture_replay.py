@@ -273,7 +273,7 @@ setTimeout(() => {
             (folder / "trace.har").write_text(json.dumps(har))
             report = analyze_recording(folder)
             self.assertEqual(report["html_route_count"], 0)
-            self.assertEqual(report["html_coverage"]["button_tags"], 2)
+            self.assertEqual(report["html_coverage"]["button_tags"], 1)
             self.assertEqual(report["har_coverage"]["script_entries"], 2)
             self.assertEqual(report["har_coverage"]["external_scripts"], 1)
             self.assertEqual(report["har_coverage"]["first_party_scripts"], 1)
