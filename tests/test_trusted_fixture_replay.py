@@ -34,6 +34,33 @@ class PackagedFixtureTests(unittest.TestCase):
             self.assertEqual(replay.respond("GET", TRUSTED_JS_ASSETS + "missing")[0], 404)
             self.assertEqual(replay.respond("POST", TRUSTED_JS_ASSETS + digest)[0], 405)
 
+    def test_nonmatching_script_bytes_are_not_enabled(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = build_fixture_recording(temp)
+            har_path = root / "trace.har"
+            har = json.loads(har_path.read_text())
+            entries = har["log"]["entries"]
+            target = next(e for e in entries if e["request"]["url"].endswith("/app.js"))
+            import base64
+            target["response"]["content"]["text"] = base64.b64encode(
+                b"document.body.dataset.test = 'changed';").decode("ascii")
+            har_path.write_text(json.dumps(har))
+            replay = CaptureReplay(root, trusted_fixture_js=True)
+            self.assertEqual(replay.trusted_js_sources, {})
+            self.assertNotIn(TRUSTED_JS_ASSETS, replay.respond("GET", "/")[1].decode())
+
+    def test_recorded_inline_scripts_stay_inert(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = build_fixture_recording(temp)
+            filename = root / "step-000.html"
+            source = filename.read_text()
+            filename.write_text(source.replace(
+                "</body>", "<script>document.title = 'Changed';</script></body>"))
+            replay = CaptureReplay(root, trusted_fixture_js=True)
+            html = replay.respond("GET", "/")[1].decode()
+            self.assertNotIn("document.title = 'Changed'", html)
+            self.assertIn(TRUSTED_JS_ASSETS, html)
+
     def test_trusted_mode_is_fixed_to_approved_fixture_origin(self):
         with tempfile.TemporaryDirectory() as temp:
             root = build_fixture_recording(temp)
