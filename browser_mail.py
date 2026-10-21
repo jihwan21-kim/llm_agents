@@ -20,6 +20,10 @@ MESSAGE_COPY = {
         "Account Services", "Your account dashboard",
         "Your account dashboard has an update available to review.",
         "You can view the latest account dashboard details using the link below."),
+    "coinbase-benign": (
+        "Account Services", "Your Coinbase account overview",
+        "Your account overview is ready to review.",
+        "Open your account dashboard to review recent activity."),
     "viva-sorte": (
         "Community Updates", "Your recent activity",
         "A quick update regarding your recent participation.",
