@@ -42,10 +42,13 @@ The editor lives on the **recorded site's local mock origin**, not
    for **read-only inspection**. A locked page loads in a sandboxed preview
    with scripts disabled and pointer interaction disabled. Its saved HTML
    and screenshots are not altered.
-2. In the center **page preview**, click an eligible button or link to
+2. In the center **page preview**, click a button or link to
    select it. The editor intercepts this click; it does not activate the
    recorded action, submit a form or navigate. A selected control gains a
-   blue outline.
+   blue outline. **Form-contained buttons** are now selectable to inspect
+   their CSS selector without the former "Select a non-form button" error.
+   They remain *inspection-only*: no form submission and no Save connection
+   for a form button. Locked authentication screens remain read-only.
 3. On the right, choose any saved **destination screen**, including
    those labeled **[read-only]**. Click **Preview selected destination
    (read-only)** to display that snapshot inside the inert editor preview.
