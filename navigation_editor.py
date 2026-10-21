@@ -61,7 +61,6 @@ class SensitivePageParser(HTMLParser):
         if tag == "form":
             if any(SENSITIVE_ATTR.search(props.get(k, "")) for k in ("action", "id", "name")):
                 self.sensitive = True
-        self.sensitive = False
 
     def handle_endtag(self, tag):
         if tag in {"title", "h1", "h2"}:
@@ -122,7 +121,7 @@ iframe{width:100%;flex:1;border:0;background:white;min-height:0}
 <button id="previousRecorded" type="button">← Previous recorded screen</button>
 <button id="nextRecorded" type="button">Next recorded screen →</button>
 <div id="message" role="status" aria-live="polite"></div>
-<div class="muted">All recorded destinations can be selected for read-only preview. Saving a connection is supported only between non-sensitive screens on the same origin. Locked destinations cannot be connected.</div>
+<div class="muted">Form buttons can be selected and inspected, but cannot submit forms or save navigation edges. Saving non-form connections is supported only between non-sensitive screens on the same origin. Locked destinations cannot be connected.</div>
 </div></section>
 </main></body></html>"""
 
@@ -131,6 +130,7 @@ EDITOR_JS = r"""(() => {
   const $ = id => document.getElementById(id);
   let state = null;
   let selectedSelector = "";
+  let selectedIsFormControl = false;
   const sourceSelect = $("from");
   const targetSelect = $("to");
   const status = $("message");
@@ -199,15 +199,25 @@ EDITOR_JS = r"""(() => {
     const raw = event.target;
     // Many recorded UI buttons are plain DIV/SPAN elements. Let the
     // researcher select them as well, rather than guessing an event target.
-    // No recorded scripts run, and form/editable controls remain excluded.
+    // No recorded scripts run. Form-contained action buttons may be
+    // selected for inspection only, never as navigation links.
     const interactive = raw?.closest?.(
       "a, button, input[type=button], input[type=submit], [role=button], [onclick], [tabindex]"
     );
     const target = interactive || raw?.closest?.("div, span, label, section, article");
-    if (!target || target.closest("form") || target.closest(
+    if (!target || target.closest(
       "input:not([type=button]):not([type=submit]), textarea, [contenteditable]"
     )) {
-      status.textContent = "Select a non-form button, link, or visual DIV/SPAN control.";
+      status.textContent = "Select a button or link, not an editable field.";
+      return;
+    }
+    const inForm = !!target.closest("form");
+    // Prevent selecting a form container or unrelated inner decorative
+    // element. Only real controls inside forms are inspectable.
+    if (inForm && !target.matches(
+      "button, input[type=button], input[type=submit], [role=button], a"
+    )) {
+      status.textContent = "Click a button inside the form, not the form itself.";
       return;
     }
     const selector = cssSelector(target, doc);
@@ -216,15 +226,21 @@ EDITOR_JS = r"""(() => {
       return;
     }
     selectedSelector = selector;
+    selectedIsFormControl = inForm;
     selectors.value = selector;
     mark(target);
-    status.textContent = "Selected: " + (target.textContent || target.getAttribute("aria-label") || target.tagName).trim().slice(0, 80);
+    updateSaveAvailability();
+    const name = (target.textContent || target.getAttribute("aria-label") ||
+      target.getAttribute("value") || target.tagName).trim().slice(0, 80);
+    status.textContent = inForm
+      ? "Selected form button (inspection only, no submit or navigation): " + name
+      : "Selected: " + name;
   }
   function updateSaveAvailability() {
     const src = state?.steps.find(s => s.id === Number(sourceSelect.value));
     const dest = state?.steps.find(s => s.id === Number(targetSelect.value));
     const canEdit = !!src && !src.blocked && !!dest && !dest.blocked &&
-      !previewOnly && previewStepId === src.id;
+      !previewOnly && previewStepId === src.id && !selectedIsFormControl;
     $("save").disabled = !canEdit;
     $("test").disabled = !dest;
     $("sourcePreview").disabled = !src;
@@ -236,6 +252,7 @@ EDITOR_JS = r"""(() => {
   }
   function loadPreview(id, asDestination = false) {
     selectedSelector = "";
+    selectedIsFormControl = false;
     selectors.value = "";
     selectedElement = null;
     const src = state.steps.find(s => s.id === id);
@@ -344,8 +361,8 @@ EDITOR_JS = r"""(() => {
     const current = state?.steps.find(s => s.id === from);
     const destination = state?.steps.find(s => s.id === to);
     if (!current || current.blocked || !destination || destination.blocked ||
-        previewOnly || previewStepId !== from) {
-      status.textContent = "This recorded screen is read-only. No navigation mapping was changed.";
+        selectedIsFormControl || previewOnly || previewStepId !== from) {
+      status.textContent = "This control or screen is inspection-only. No form submission or navigation mapping was changed.";
       return;
     }
     if (!selectedSelector || !Number.isInteger(from) || !Number.isInteger(to)) {
@@ -386,7 +403,6 @@ class NavigationEditor:
             blocked = (url.hostname != self.host
                        or bool(SENSITIVE_PATH.search(url.path))
                        or parser.sensitive)
-            blocked = False
             self.states.append({
                 "id": i, "path": url.path or "/", "blocked": bool(blocked),
             })
