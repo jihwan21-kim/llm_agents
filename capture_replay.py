@@ -86,7 +86,7 @@ SIM_JS = r"""
       console.info("[offline mock] Previewing unverified DOM settling",
                    {from: step, to: domSettleTo});
       const next = new URL(location.pathname, location.origin);
-      next.searchParams.set("__mock_step", String(domSettleTo));
+      next.searchParams.set("_step", String(domSettleTo));
       // Settling is not a user navigation. Avoid adding spurious entries to
       // browser history; Back should return to the previous clicked page.
       location.replace(next.pathname + next.search);
@@ -177,7 +177,7 @@ SIM_JS = r"""
            edge.outcome === "manual_navigation") &&
           edge.to !== step && edge.to_path) {
         const url = new URL(edge.to_path, location.origin);
-        url.searchParams.set("__mock_step", String(edge.to));
+        url.searchParams.set("_step", String(edge.to));
         location.assign(url.pathname + url.search);
       }
     } catch (error) { console.error("Offline mock event failed", error); }
@@ -572,7 +572,7 @@ class CaptureReplay:
                     "outcome": "manual_navigation",
                 })
             # Legacy manual recordings do not contain action-to-state edges.
-            # They remain inspectable through __mock_step, but no longer advance
+            # They remain inspectable through _step, but no longer advance
             # to an arbitrary next screen on unrelated button clicks.
             transitions_attr = html.escape(json.dumps(edges), quote=True)
             preview_to = self.preview_edges.get(index)
@@ -655,7 +655,7 @@ class CaptureReplay:
             return 404, b"Not captured", "text/plain"
         # The displayed URL preserves the original recorded hostname and path.
         # The query selects an offline snapshot, never the real website.
-        requested = parse_qs(query).get("__mock_step")
+        requested = parse_qs(query).get("_step")
         if requested is None:
             entry_path = urlsplit(self.start_url).path or "/"
             if path == entry_path:
