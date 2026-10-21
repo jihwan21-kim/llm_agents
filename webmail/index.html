@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inbox · Cedar Mail</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#202b3c;background:#f4f6fa;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0;min-width:320px}button,input{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #5c95ee;outline-offset:2px}
+button{border:0;background:transparent;color:inherit}
+#shell{height:100vh;min-height:560px;display:grid;grid-template-columns:230px minmax(310px,410px) minmax(340px,1fr);grid-template-rows:76px minmax(0,1fr);gap:0}
+header{grid-column:1/4;display:grid;grid-template-columns:230px minmax(320px,1fr) 175px;align-items:center;gap:0;border-bottom:1px solid #e1e7f1;background:#fff}
+#brand{padding:0 24px;display:flex;align-items:center;gap:11px;font-size:20px;font-weight:750;letter-spacing:-.6px}
+#mark{width:34px;height:34px;border-radius:11px;background:#335fbf;color:white;display:grid;place-items:center;font-size:20px;transform:rotate(-5deg)}
+#searchWrap{margin:0 22px;display:flex;align-items:center;gap:10px;max-width:700px;padding:0 18px;height:43px;border-radius:13px;background:#f0f4fb;color:#687c9b}
+#search{width:100%;min-width:0;border:0;outline:none!important;background:transparent;color:#263b59}
+#search::placeholder{color:#8490a6}
+#profile{display:flex;align-items:center;justify-content:flex-end;padding:0 25px;gap:15px;color:#6b7a8f;font-size:13px}
+#avatar{width:36px;height:36px;display:grid;place-items:center;background:#ecf1fc;color:#375fa1;border-radius:50%;font-size:14px;font-weight:700}
+aside{border-right:1px solid #e1e7f1;padding:20px 13px;display:flex;flex-direction:column;gap:5px}
+#navLabel{margin:19px 18px 12px;color:#91a0b5;text-transform:uppercase;letter-spacing:1.3px;font-size:10px;font-weight:750}
+.nav{border-radius:10px;display:flex;align-items:center;gap:12px;padding:12px 14px;text-align:left;color:#64748b;font-size:14px;font-weight:520}
+.nav.active{background:#e3ecff;color:#2150a5;font-weight:700}
+.nav:hover{background:#e9eef7}
+.navIcon{display:inline-block;width:20px;text-align:center;font-size:17px;color:inherit}
+.counter{margin-left:auto;font-size:11px;font-weight:750}
+#leftFooter{margin-top:auto;padding:16px 15px;font-size:12px;color:#98a5b9}
+#listPanel{background:#fff;border-right:1px solid #e1e7f1;overflow-y:auto}
+#listTop{padding:25px 24px 17px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eff2f8}
+#listTop h1{font-size:23px;margin:0;font-weight:760;letter-spacing:-.7px}
+#listCount{color:#8190a9;font-size:12px}
+#listHint{padding:14px 24px;color:#98a5b9;font-size:12px;border-bottom:1px solid #eff2f8}
+.messageRow{border:0;border-bottom:1px solid #eef2f8;display:block;width:100%;padding:19px 24px;text-align:left;cursor:pointer;background:white;position:relative}
+.messageRow:hover{background:#f6f8fc}.messageRow.selected{background:#eaf1ff}
+.messageRow.unread:before{position:absolute;content:"";height:7px;width:7px;background:#376bcb;border-radius:50%;left:10px;top:29px}
+.messageFirst{display:flex;align-items:baseline;justify-content:space-between;gap:9px}
+.messageSender{font-size:13px;font-weight:650;color:#25334b}
+.messageTime{font-size:11px;color:#98a5b4;white-space:nowrap}
+.messageSubject{color:#283648;margin:7px 0 5px;font-size:13px;line-height:1.4;font-weight:650}
+.messagePreview{color:#8390a6;line-height:1.45;font-size:12px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.messageRow:not(.unread) .messageSender,.messageRow:not(.unread) .messageSubject{font-weight:500}
+#reader{overflow-y:auto;background:#fff}
+#readerEmpty{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#9ba8bb;gap:16px;padding:30px;text-align:center}
+#readerEmpty b{color:#52637c;font-size:17px}#emptyIcon{width:80px;height:80px;border-radius:50%;background:#f0f4fa;display:grid;place-items:center;font-size:31px}
+#readerContent{display:none;padding:35px max(32px,6%)}
+#readerContent h2{font-size:25px;font-weight:730;letter-spacing:-.5px;margin:9px 0 28px}
+#readerTools{display:flex;align-items:center;gap:12px;color:#8492a7;font-size:13px}
+#readerTools button{border:1px solid #e2e8f2;padding:8px 13px;border-radius:9px}
+#fromBar{display:flex;align-items:center;gap:12px;padding:17px 0 24px;border-bottom:1px solid #edf0f6}
+#senderAvatar{height:42px;width:42px;display:grid;place-items:center;border-radius:50%;background:#e6edf9;color:#335c9e;font-size:18px;font-weight:680}
+#fromName{font-size:13px;color:#2b3a52;font-weight:650}
+#fromAddress{color:#9aabc1;font-size:12px;margin-top:4px}
+#date{margin-left:auto;color:#98a7bb;font-size:12px}
+#bodyText{white-space:pre-line;font-size:14px;line-height:1.85;color:#475770;padding:27px 0 8px;max-width:640px}
+#linkButton{display:inline-flex;align-items:center;gap:10px;text-decoration:none;background:#2f63c6;color:white;padding:12px 19px;border-radius:9px;font-size:13px;font-weight:650;margin:22px 0 27px}
+#linkButton:hover{background:#234e9f}
+#signature{font-size:12px;color:#9aabc0;line-height:1.75;margin-top:28px}
+#listEmpty{display:none;padding:30px;color:#7b8aa2;text-align:center;font-size:13px}
+#mobileBack{display:none}
+@media(max-width:1100px){#shell{grid-template-columns:72px minmax(280px,370px) minmax(300px,1fr)}header{grid-template-columns:72px 1fr 95px}
+#brand{padding:0 17px}#brandName{display:none}aside{padding:20px 7px}.nav{justify-content:center}.navText,.counter,#navLabel,#leftFooter{display:none}#profile{padding:0 16px}#profileName{display:none}}
+@media(max-width:740px){#shell{height:100dvh;grid-template-columns:1fr;grid-template-rows:66px minmax(0,1fr)}header{grid-column:1;grid-template-columns:65px 1fr 54px}
+#searchWrap{margin:0 9px}#brand{padding:0 15px}#profile{padding:0 9px}#avatar{width:31px;height:31px}
+aside{display:none}#listPanel{grid-column:1;grid-row:2}#reader{display:none;grid-column:1;grid-row:2}
+#shell.reading #listPanel{display:none}#shell.reading #reader{display:block}#readerContent{padding:23px}
+#mobileBack{display:inline-block!important}}
+</style>
+<script src="/app.js" defer></script>
+</head>
+<body>
+<div id="shell">
+<header>
+<div id="brand"><div id="mark" aria-hidden="true">✉</div><span id="brandName">Cedar Mail</span></div>
+<label id="searchWrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search mail" aria-label="Search mail" autocomplete="off"></label>
+<div id="profile"><span id="profileName">My Mail</span><div id="avatar" aria-hidden="true">CM</div></div>
+</header>
+<aside aria-label="Mail folders">
+<div id="navLabel">Mailbox</div>
+<button class="nav active" type="button" data-folder="inbox"><span class="navIcon">▤</span><span class="navText">Inbox</span><span id="inboxCount" class="counter"></span></button>
+<button class="nav" type="button" data-folder="starred"><span class="navIcon">☆</span><span class="navText">Starred</span></button>
+<button class="nav" type="button" data-folder="all"><span class="navIcon">▦</span><span class="navText">All mail</span></button>
+<div id="leftFooter">Cedar Mail</div>
+</aside>
+<section id="listPanel" aria-label="Messages">
+<div id="listTop"><h1 id="folderTitle">Inbox</h1><span id="listCount"></span></div>
+<div id="listHint">Recent messages</div>
+<div id="list" role="list"></div>
+<div id="listEmpty">No messages found.</div>
+</section>
+<main id="reader" aria-label="Message">
+<div id="readerEmpty"><div id="emptyIcon">✉</div><b>Select a message</b><span>Choose an email to read its contents.</span></div>
+<div id="readerContent">
+<div id="readerTools"><button id="mobileBack" type="button">← Back</button><span>Message</span></div>
+<h2 id="mailSubject"></h2>
+<div id="fromBar"><div id="senderAvatar"></div><div><div id="fromName"></div><div id="fromAddress"></div></div><span id="date"></span></div>
+<div id="bodyText"></div>
+<a id="linkButton" href="#" rel="noreferrer">View details <span aria-hidden="true">↗</span></a>
+<div id="signature"></div>
+</div>
+</main>
+</div>
+</body>
+</html>
