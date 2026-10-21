@@ -109,6 +109,26 @@ class ReplayTests(unittest.TestCase):
             branches = [e for e in recorder.transitions if e["from"] == 0]
             self.assertEqual({(e["selector"], e["to"]) for e in branches},
                              {("#a", 1), ("#b", 2)})
+            # A clickable DIV, rather than a semantic button, must still
+            # create an edge that can be matched by the replay.
+            recorder.on_console(Msg({
+                "kind": "click", "selector": "#custom-card", "tag": "div"
+            }))
+            page.url = "https://example.test/card"
+            page.content = "<html><body><div id='custom-card'>Done</div></body></html>"
+            recorder.snapshot("click")
+            self.assertEqual(recorder.transitions[-1]["selector"], "#custom-card")
+            self.assertEqual(recorder.transitions[-1]["from"], 2)
+            self.assertEqual(recorder.transitions[-1]["to"], 3)
+            self.assertEqual(len(recorder.action_events), 4)
+
+    def test_capture_event_instrumentation_covers_non_buttons(self):
+        source = (Path(__file__).resolve().parents[1] / "automatic_capture.py").read_text()
+        replay = (Path(__file__).resolve().parents[1] / "capture_replay.py").read_text()
+        self.assertIn('const el = elementFor(e);', source)
+        self.assertIn('el.closest(interactive) || el', source)
+        self.assertIn('const chain = event.composedPath?.() || [];', replay)
+        self.assertIn('const edge = edges.find(e => e.kind === "click"', replay)
 
     def test_recorded_branches_not_arbitrary_next_step(self):
         with tempfile.TemporaryDirectory() as t:
