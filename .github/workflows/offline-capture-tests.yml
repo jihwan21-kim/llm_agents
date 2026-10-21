@@ -5,6 +5,10 @@ on:
   pull_request:
     paths:
       - capture_replay.py
+      - navigation_editor.py
+      - tests/test_navigation_editor.py
+      - start-navigation-editor-windows.bat
+      - gym/NAVIGATION_EDITOR.md
       - fidelity_audit.py
       - tests/test_fidelity_audit.py
       - run_capture_proxy.py
