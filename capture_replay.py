@@ -12,7 +12,7 @@ import mimetypes
 from pathlib import Path
 import re
 from urllib.parse import urljoin, urlsplit, parse_qs
-from navigation_analysis import extract_html_navigation
+from navigation_analysis import extract_html_navigation, temporal_dom_candidates
 
 ASSETS = "/__mock_capture/assets/"
 SIMULATOR = "/__mock_capture/sim.js"
@@ -26,6 +26,24 @@ SIM_JS = r"""
   try { edges = JSON.parse(config.transitions || "[]"); }
   catch (err) { console.error("Invalid recorded transition data", err); }
   let busy = false;
+
+  // Research-only preview: this DOM update was NOT attributed to any click.
+  // An explicit local-only flag must enable this. The delay is a display
+  // convenience, not timing reconstructed from the original site.
+  const domSettleTo = config.domSettleTo === undefined
+    ? null : Number(config.domSettleTo);
+  if (domSettleTo !== null && Number.isSafeInteger(domSettleTo) &&
+      domSettleTo !== step && domSettleTo > step) {
+    window.setTimeout(() => {
+      console.info("[offline mock] Previewing unverified DOM settling",
+                   {from: step, to: domSettleTo});
+      const next = new URL(location.pathname, location.origin);
+      next.searchParams.set("__mock_step", String(domSettleTo));
+      // Settling is not a user navigation. Avoid adding spurious entries to
+      // browser history; Back should return to the previous clicked page.
+      location.replace(next.pathname + next.search);
+    }, 500);
+  }
 
   // A recorded no-op on a broad ancestor (e.g. "body > main")
   // must not shadow a narrower successful click transition underneath it.
@@ -276,7 +294,7 @@ class SnapshotSanitizer(HTMLParser):
 
 
 class CaptureReplay:
-    def __init__(self, directory):
+    def __init__(self, directory, preview_dom_settling=False):
         self.directory = Path(directory).expanduser().resolve(strict=True)
         self.bundle = json.loads((self.directory / "bundle.json").read_text(encoding="utf-8"))
         self.start_url = self.bundle.get("startUrl", "")
@@ -288,6 +306,22 @@ class CaptureReplay:
         self.transitions = self.bundle.get("transitions", [])
         if not self.steps:
             raise ValueError("No recorded HTML snapshots")
+        self.preview_dom_settling = bool(preview_dom_settling)
+        # Only time-adjacent, same-URL, previously recorded DOM states.
+        # Not verified user actions. The default remains strict replay.
+        candidates = temporal_dom_candidates(self.steps, self.transitions)
+        self.dom_settle_candidates = candidates
+        self.preview_edges = {}
+        if self.preview_dom_settling:
+            for candidate in candidates:
+                source, dest = candidate["from"], candidate["to"]
+                if source not in self.preview_edges:
+                    self.preview_edges[source] = dest
+                else:
+                    # Ambiguity: never choose arbitrary next UI state.
+                    self.preview_edges[source] = None
+            self.preview_edges = {s: t for s, t in self.preview_edges.items()
+                                  if t is not None}
         # Loading scripts often generate many no-action snapshots before
         # the first user click. Start at the first verified actionable state
         # on the recorded entry path, rather than always at state zero.
@@ -394,8 +428,11 @@ class CaptureReplay:
             # They remain inspectable through __mock_step, but no longer advance
             # to an arbitrary next screen on unrelated button clicks.
             transitions_attr = html.escape(json.dumps(edges), quote=True)
+            preview_to = self.preview_edges.get(index)
+            preview_attr = (f' data-dom-settle-to="{preview_to}"'
+                            if preview_to is not None else "")
             shim = (f'<script src="{SIMULATOR}" data-step="{index}" '
-                    f'data-transitions="{transitions_attr}"></script>')
+                    f'data-transitions="{transitions_attr}"{preview_attr}></script>')
             page = "".join(parser.result)
             page = (page.replace("</body>", shim + "</body>", 1)
                     if "</body>" in page else page + shim)

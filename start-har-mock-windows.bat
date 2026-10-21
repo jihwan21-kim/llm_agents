@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 if "%~1"=="" (
-  echo Usage: start-har-mock-windows.bat "recordings\site-id\run-folder"
+  echo Usage: start-har-mock-windows.bat "recordings\site-id\run-folder" [--preview-dom-settling]
   exit /b 1
 )
 if not exist ".venv\Scripts\python.exe" (
@@ -14,7 +14,7 @@ if not exist "%~1\bundle.json" (
   exit /b 1
 )
 echo Close any existing proxy on port 8080 before continuing.
-.venv\Scripts\python.exe run_capture_proxy.py --recording "%~1"
+.venv\Scripts\python.exe run_capture_proxy.py --recording "%~1" %2
 if errorlevel 1 (
   echo Replay failed. Check the messages above.
   pause

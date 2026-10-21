@@ -437,6 +437,42 @@ setTimeout(() => {
             self.assertEqual(replay.respond("GET", "/a/b", "__mock_step=0")[0], 200)
             self.assertEqual(replay.respond("GET", "/a/b", "__mock_step=1")[0], 200)
 
+    def test_dom_settling_preview_is_explicit_and_stays_unverified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.make_recording(tmp)
+            folder = Path(tmp)
+            bundle = json.loads((folder / "bundle.json").read_text())
+            bundle["steps"][1]["reason"] = "dom-change"
+            (folder / "bundle.json").write_text(json.dumps(bundle))
+            strict = CaptureReplay(folder)
+            self.assertEqual(len(strict.dom_settle_candidates), 1)
+            self.assertFalse(strict.preview_dom_settling)
+            self.assertEqual(strict.preview_edges, {})
+            self.assertNotIn("data-dom-settle-to=",
+                             strict.respond("GET", "/a/b")[1].decode())
+            preview = CaptureReplay(folder, preview_dom_settling=True)
+            self.assertEqual(preview.preview_edges, {0: 1})
+            page = preview.respond("GET", "/a/b", "__mock_step=0")[1].decode()
+            self.assertIn('data-dom-settle-to="1"', page)
+            self.assertEqual(preview.respond("GET", "/a/b", "__mock_step=1")[0], 200)
+            self.assertEqual(len(preview.transitions), 0)
+            self.assertFalse(preview.dom_settle_candidates[0]["observed_action"])
+            self.assertFalse(preview.dom_settle_candidates[0]["replayable"])
+
+    def test_dom_settling_preview_never_crosses_url_or_invents_routes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.make_recording(tmp)
+            folder = Path(tmp)
+            bundle = json.loads((folder / "bundle.json").read_text())
+            bundle["steps"][1]["reason"] = "dom-change"
+            bundle["steps"][1]["url"] = "https://example.test/elsewhere"
+            (folder / "bundle.json").write_text(json.dumps(bundle))
+            preview = CaptureReplay(folder, preview_dom_settling=True)
+            self.assertEqual(preview.dom_settle_candidates, [])
+            self.assertEqual(preview.preview_edges, {})
+            self.assertNotIn("data-dom-settle-to=", 
+                             preview.respond("GET", "/a/b", "__mock_step=0")[1].decode())
+
     def test_recorded_branches_not_arbitrary_next_step(self):
         with tempfile.TemporaryDirectory() as t:
             self.make_recording(t)

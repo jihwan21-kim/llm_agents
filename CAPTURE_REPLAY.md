@@ -335,3 +335,38 @@ Do not modify a recorded original transition to call it a verified click
 without supporting action evidence. This diagnostic does not solve missing
 cross-URL navigation, browser back-button capture or server-driven POST
 states; those require a different explicit capture mechanism.
+
+
+## Experimental preview for disconnected same-URL DOM snapshots
+
+A previous recording of a JavaScript-driven site showed 23 saved states,
+17 observed action edges, and 8 unverified consecutive same-URL DOM
+settling candidates. The strict observed graph reached 7 states, whereas
+including those **hypothetical temporal** connections reached 22 states.
+
+To visually inspect the connected recorded UI without altering the
+experiment's original observations, run the server with an **explicit**
+preview opt-in:
+
+    .\start-har-mock-windows.bat ".\recordings\mercadolivre\auto-flow-fixed-20261021T020202Z" --preview-dom-settling
+
+Without that flag the replay remains strict and unchanged. With the
+flag, the local-only simulator waits a fixed 500 ms on each captured
+same-URL DOM settling snapshot and replaces its displayed state with
+the next time-adjacent snapshot. This delay is an arbitrary preview
+convenience, **not captured page timing**. Browser history is not
+expanded by the settling change, so normal Back navigation still returns
+to the last user-clicked page instead of a transient loading snapshot.
+
+The simulator never treats these preview changes as observed clicks,
+never changes the original `transitions.json`, and never runs recorded
+source scripts or sends requests upstream. Candidates with different URLs
+or ambiguous source states are skipped. The mode is **not appropriate for
+quantitative agent-security experiments** until each transition is
+independently checked against recorded behavior. Do not count a preview
+transition as a verified successful interaction.
+
+If buttons remain unresponsive while the preview is enabled, check
+`http://mock.test/__mock_capture/events`: missing click selectors and
+server-dependent actions are separate limitations not repaired by this
+feature.
