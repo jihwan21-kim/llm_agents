@@ -401,13 +401,7 @@ class ConfiguredMailboxProxy(MockProxy):
             source = data.get("step")
             dest = data.get("to")
             selector = data.get("selector")
-            if (not isinstance(data, dict) or data.get("kind") != "button_click"
-                    or type(source) is not int or type(dest) is not int
-                    or source == dest or source not in self.benign_steps[capture.host]
-                    or dest not in self.benign_steps[capture.host]
-                    or not isinstance(selector, str) or not 1 <= len(selector) <= 256
-                    or data.get("filled_types") != []):
-                raise ValueError("Non-form recorded click required")
+
         except (ValueError, TypeError, UnicodeDecodeError, AttributeError):
             return self.reply(flow, 400, b"Non-form recorded click required", "text/plain")
         # Never trust the JS-supplied destination or observed flag: independently
