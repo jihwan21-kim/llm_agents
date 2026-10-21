@@ -154,3 +154,29 @@ different authorized capture target or a properly configured local mock.
 The recorder deliberately does not set `ignore_https_errors`, disable
 certificate checks or auto-click Chrome's certificate interstitial.
 Those workarounds would hide a security signal from the research experiment.
+
+
+## Debugging unresponsive buttons in offline replay
+
+The old recorder watched only native buttons, links, and explicit ARIA
+buttons. Real sites sometimes implement clickable DIV or SPAN elements.
+The recorder and local replay now accept non-button click targets and retain
+`action-events.json`, which contains only the event type, element selector,
+and graph state index (never typed form values).
+
+When capture finishes, compare **Captured N clicks**, **Saved N states**,
+and **N action edges** in the console. Inspect `transitions.json`: the
+first captured page normally has `from: 0` edges for actions that reached
+new states. If the recorder saved many screens but no edges, the replay
+cannot safely guess what button led where. Those old recordings need a
+fresh recording or separately verified manual mappings.
+
+Open the proxy browser's developer console when a replay click does not
+move. `No recorded transition for clicked element` means that the
+element has no matching recorded graph edge. Read `http://mock.test/__mock_capture/events`
+in the same proxy browser to inspect which events were locally observed.
+
+Clicks within cross-origin frames, separate pop-up windows or navigation
+blocked by the recorder's read-only network guard may still be unrecorded.
+Only user-observed transitions can be replayed. Do not disable the guard
+or provide genuine account credentials to force an inaccessible screen.

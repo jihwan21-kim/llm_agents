@@ -26,28 +26,42 @@ EVENT_SCRIPT = r"""
   if (window.__mockAutoCapture) return;
   window.__mockAutoCapture = true;
   const emit = e => console.log("__MOCK_AUTO_EVENT__" + JSON.stringify(e));
+  // Many JS-driven sites use clickable DIV/SPAN elements instead of BUTTON.
+  // Capture all non-input clicks, preferring a stable interactive ancestor,
+  // so we can replay the observed choice rather than any arbitrary button.
+  const interactive = "button, a, label, summary, select, input[type=submit], input[type=button], [role=button], [onclick], [tabindex], [data-testid]";
+  const elementFor = event => {
+    const path = event.composedPath?.() || [];
+    return path.find(item => item instanceof Element)
+      || (event.target instanceof Element ? event.target : null);
+  };
   const selector = node => {
     if (!(node instanceof Element)) return "";
-    const item = node.closest("button, a, input[type=submit], input[type=button], select, [role=button], form") || node;
-    if (item.id && /^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/.test(item.id)) return "#" + item.id;
+    const item = node.closest(interactive) || node;
+    if (item.id && /^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/.test(item.id))
+      return "#" + item.id;
     const attr = item.getAttribute("data-testid");
     if (attr && /^[a-zA-Z0-9_-]{1,79}$/.test(attr))
       return '[data-testid="' + attr + '"]';
+    // The path is a fallback only. The replay uses the same selector on the
+    // saved DOM and logs unmatched actions rather than inventing transitions.
     const path = [];
     let el = item;
-    while (el && el.nodeType === 1 && el !== document.documentElement && path.length < 12) {
+    while (el && el.nodeType === 1 && el !== document.documentElement && path.length < 18) {
       const tag = el.tagName.toLowerCase();
       const peers = el.parentElement
         ? Array.from(el.parentElement.children).filter(x => x.tagName === el.tagName) : [];
-      path.unshift(tag + (peers.length > 1 ? ":nth-of-type(" + (peers.indexOf(el) + 1) + ")" : ""));
+      path.unshift(tag + (peers.length > 1
+        ? ":nth-of-type(" + (peers.indexOf(el) + 1) + ")" : ""));
       el = el.parentElement;
     }
     return path.join(" > ");
   };
   document.addEventListener("click", e => {
-    const el = e.target instanceof Element
-      ? e.target.closest("button, a, input[type=submit], input[type=button], [role=button]") : null;
-    if (el) emit({kind:"click", selector:selector(el), tag:el.tagName.toLowerCase()});
+    const el = elementFor(e);
+    if (!el || el.closest("input[type=password], textarea, [contenteditable]")) return;
+    const picked = el.closest(interactive) || el;
+    emit({kind:"click", selector:selector(picked), tag:picked.tagName.toLowerCase()});
   }, true);
   document.addEventListener("submit", e => {
     emit({kind:"submit", selector:selector(e.target), tag:"form"});
@@ -141,7 +155,7 @@ def export_static_assets(har_path, output):
 class Recorder:
     def __init__(self, page, out, limit):
         self.page, self.out, self.limit = page, out, limit
-        self.steps, self.transitions = [], []
+        self.steps, self.transitions, self.action_events = [], [], []
         self.pending, self.last_change = None, 0
         self.seen_mutation = False
         self.mutation_started = None
@@ -165,6 +179,12 @@ class Recorder:
             self.seen_mutation = True
             self.last_change = now
         elif event.get("kind") in {"click", "submit", "change"}:
+            self.action_events.append({
+                "kind": event["kind"],
+                "selector": str(event.get("selector", ""))[:256],
+                "from": self.current_index,
+                "seq": len(self.action_events)
+            })
             if self.pending is None:
                 self.pending = {
                     "kind": event["kind"],
@@ -387,7 +407,15 @@ def main():
     }
     (out / "bundle.json").write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
     (out / "transitions.json").write_text(json.dumps(transitions, indent=2), encoding="utf-8")
+    (out / "action-events.json").write_text(
+        json.dumps(recorder.action_events, indent=2), encoding="utf-8"
+    )
+    clicks = sum(a["kind"] == "click" for a in recorder.action_events)
     print(f"Saved {len(steps)} states, {len(transitions)} action edges, {assets} assets and {count} HAR entries.")
+    print(f"Captured {clicks} clicks and {len(recorder.action_events)} total user actions.")
+    if len(steps) > 1 and not transitions:
+        print("WARNING: Multiple screens but no action edges. The replay cannot infer which button navigates.")
+        print("Check whether the workflow uses new tabs, cross-origin frames, or unsupported clicks.")
     print("Replay:", "start-har-mock-windows.bat", str(out))
 
 if __name__ == "__main__":
