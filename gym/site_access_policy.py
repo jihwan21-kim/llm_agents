@@ -101,18 +101,20 @@ def require_site_mode(url_or_host, mode, *, fixture_id=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Check exact-host site capabilities")
-    parser.add_argument("--url", required=True, help="URL or exact hostname")
+    parser.add_argument("--url", help="URL or exact hostname")
     parser.add_argument("--mode", required=True, choices=sorted(MODES))
     parser.add_argument("--fixture-id", help="Required for native_js")
     parser.add_argument("--recording", help="Optional recording bundle to check its startUrl")
     args = parser.parse_args()
     try:
+        if not (args.url or args.recording):
+            raise SitePolicyError("Provide --url or --recording")
         url = args.url
         if args.recording:
             saved = Path(args.recording).expanduser().resolve(strict=True)
             bundle = json.loads((saved / "bundle.json").read_text(encoding="utf-8"))
             start = bundle["startUrl"]
-            if normalize_host(start) != normalize_host(args.url):
+            if args.url and normalize_host(start) != normalize_host(args.url):
                 raise SitePolicyError("Recording host differs from selected host")
             url = start
         entry = require_site_mode(url, args.mode, fixture_id=args.fixture_id)
