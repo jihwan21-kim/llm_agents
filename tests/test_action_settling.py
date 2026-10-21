@@ -175,6 +175,15 @@ class ActionSettlingTests(unittest.TestCase):
             self.assertEqual(r.transitions[-1]["kind"], "browser_navigation")
             self.assertEqual((r.transitions[-1]["from"], r.transitions[-1]["to"]), (1, 0))
 
+    def test_click_listener_does_not_treat_focusable_main_as_button(self):
+        source = (ROOT / "automatic_capture.py").read_text(encoding="utf-8")
+        interactive = next(line for line in source.splitlines()
+                           if line.strip().startswith("const interactive = "))
+        self.assertNotIn("[tabindex]", interactive)
+        self.assertIn("[role=button]", interactive)
+        self.assertIn("target_selector:selector(el)", source)
+        self.assertIn("action_id: ++nextActionId", source)
+
     def test_finish_keeps_unresolved_action_unverified(self):
         clock, page = Clock(), MockPage()
         with tempfile.TemporaryDirectory() as tmp:
