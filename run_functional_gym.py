@@ -16,6 +16,7 @@ from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from gym.functional_sites import FunctionalSite, SITES
+from gym.build_approved_mock import load_approved_mock
 from proxy_app import MockProxy
 
 ROOT = Path(__file__).resolve().parent
@@ -28,9 +29,9 @@ CSP = (
 
 
 class FunctionalGymProxy(MockProxy):
-    def __init__(self, site):
+    def __init__(self, site, generated=False):
         super().__init__()
-        self.site = FunctionalSite(site)
+        self.site = (load_approved_mock(site) if generated else FunctionalSite(site))
         print("Functional JS gym:", self.site.url, flush=True)
         print("Site-specific JavaScript loaded at /app.js; no generic sim.js",
               flush=True)
@@ -106,13 +107,13 @@ class FunctionalGymProxy(MockProxy):
         self.respond(flow, local.status, local.body, local.mime)
 
 
-async def run(site):
+async def run(site, generated=False):
     opts = Options(listen_host="127.0.0.1", listen_port=8080,
                    confdir=str(ROOT / "mitm-ca"))
     master = DumpMaster(opts)
     master.options.update(connection_strategy="lazy", upstream_cert=False,
                           body_size_limit="1m")
-    addon = FunctionalGymProxy(site)
+    addon = FunctionalGymProxy(site, generated=generated)
     master.addons.add(addon)
     print("Open the dedicated proxy Chrome, then:", addon.site.url, flush=True)
     print("Events: http://mock.test/__gym/events", flush=True)
@@ -124,9 +125,11 @@ async def run(site):
 def main():
     parser = argparse.ArgumentParser(description="Functional first-party JS gym")
     parser.add_argument("--site", choices=sorted(SITES), required=True)
+    parser.add_argument("--generated", action="store_true",
+                        help="Serve byte-verified auto-generated approved site mock")
     args = parser.parse_args()
     try:
-        asyncio.run(run(args.site))
+        asyncio.run(run(args.site, generated=args.generated))
     except KeyboardInterrupt:
         pass
 
