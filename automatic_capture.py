@@ -75,15 +75,18 @@ EVENT_SCRIPT = r"""
     if (!el || el.closest("input[type=password], textarea, [contenteditable]")) return;
     const picked = el.closest(interactive) || el;
     emitAction({kind:"click", selector:selector(picked),
-      target_selector:selector(el), tag:picked.tagName.toLowerCase()});
+      target_selector:selector(el), tag:picked.tagName.toLowerCase(),
+      trusted:e.isTrusted === true});
   }, true);
   document.addEventListener("submit", e => {
-    emitAction({kind:"submit", selector:selector(e.target), tag:"form"});
+    emitAction({kind:"submit", selector:selector(e.target), tag:"form",
+      trusted:e.isTrusted === true});
   }, true);
   document.addEventListener("change", e => {
     const el = e.target;
     if (el && ["SELECT", "INPUT"].includes(el.tagName) && el.type !== "password")
-      emitAction({kind:"change", selector:selector(el), tag:el.tagName.toLowerCase()});
+      emitAction({kind:"change", selector:selector(el), tag:el.tagName.toLowerCase(),
+        trusted:e.isTrusted === true});
   }, true);
   // Observe JS routing while the original site is running in the isolated
   // capture browser. Keep the original history methods' behavior intact.
@@ -186,6 +189,7 @@ class Recorder:
         self.navigation_events = []
         self.blocked_writes = []
         self.completed_actions = []
+        self.derived_events = []
         self.pending, self.last_change = None, 0
         self.seen_mutation = False
         self.mutation_started = None
@@ -246,6 +250,34 @@ class Recorder:
             self.seen_mutation = True
             self.last_change = now
         elif event.get("kind") in {"click", "submit", "change"}:
+            kind = event["kind"]
+            selector = str(event.get("selector", ""))[:256]
+            # HTMLElement.click() fires an untrusted click. Previous versions
+            # mistook such script-generated clicks as second human actions and
+            # discarded the pending user click as "interrupted".
+            if event.get("trusted") is False:
+                self.derived_events.append({
+                    "kind": kind, "selector": selector, "trusted": False,
+                    "from": self.current_index,
+                    "parent_action_id": self.pending["action_id"] if self.pending else None,
+                    "reason": "script_generated",
+                })
+                return
+            # A native form submit or field change can be a consequence of a
+            # real button click, not another independent click. Preserve the
+            # initial human action as the cause of the resulting DOM.
+            if (self.pending and self.pending["kind"] == "click"
+                    and kind in {"submit", "change"}
+                    and now - self.pending["started"] < 1.5):
+                self.derived_events.append({
+                    "kind": kind, "selector": selector,
+                    "trusted": bool(event.get("trusted", True)),
+                    "from": self.current_index,
+                    "parent_action_id": self.pending["action_id"],
+                    "reason": "immediate_followup_event",
+                })
+                self.last_change = now
+                return
             # Do not silently merge different human actions into one edge.
             # If a new action arrives before the previous one has settled,
             # its cause is ambiguous: record that explicitly.
@@ -254,12 +286,12 @@ class Recorder:
             seq = len(self.action_events)
             incoming = event.get("action_id")
             action_id = seq + 1
-            selector = str(event.get("selector", ""))[:256]
             self.action_events.append({
                 "action_id": action_id, "kind": event["kind"],
                 "selector": selector, "from": self.current_index,
                 "seq": seq, "browser_action_id": incoming if type(incoming) is int else None,
                 "target_selector": str(event.get("target_selector", ""))[:256],
+                "trusted": event.get("trusted") is not False,
                 "outcome": "pending"
             })
             self.pending = {
@@ -559,6 +591,11 @@ def main():
     (out / "action-events.json").write_text(
         json.dumps(recorder.action_events, indent=2), encoding="utf-8"
     )
+    # Clicks dispatched by JavaScript and native follow-up events are not
+    # independently counted as human actions; keep an audit trail.
+    (out / "derived-events.json").write_text(
+        json.dumps(recorder.derived_events, indent=2), encoding="utf-8"
+    )
     (out / "navigation-events.json").write_text(
         json.dumps(recorder.navigation_events, indent=2), encoding="utf-8"
     )
@@ -578,6 +615,8 @@ def main():
         outcome = a.get("outcome", "unknown")
         stats[outcome] = stats.get(outcome, 0) + 1
     print("Action outcomes:", json.dumps(stats, sort_keys=True))
+    print(f"Script/default follow-up events: {len(recorder.derived_events)} "
+          "(see derived-events.json, not counted as user clicks).")
     print(f"Blocked live writes: {len(recorder.blocked_writes)}. "
           "See action-events.json and blocked-writes.json for diagnostics.")
     print(f"Saved {len(steps)} states, {len(transitions)} action edges, {assets} assets and {count} HAR entries.")
