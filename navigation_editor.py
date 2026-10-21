@@ -96,7 +96,7 @@ iframe{width:100%;flex:1;border:0;background:white;min-height:0}
 <div class="muted">The recording itself is never changed. Your manual mappings are saved in a separate JSON file.</div>
 <h2>Saved connections</h2><ul id="existing"></ul></div></section>
 <section><h2>2. Click the button in this preview</h2>
-<div id="frameMessage">Click a link, button, or clickable control in the recorded snapshot to select it. This does not perform the action.</div>
+<div id="frameMessage">Click a link, button, or visual DIV/SPAN control in the recorded snapshot to select it. This does not perform the action.</div>
 <iframe id="preview" title="Recorded snapshot preview"></iframe></section>
 <section><h2>3. Choose the destination</h2><div class="pad">
 <label for="selector">Selected control (CSS selector)</label><input id="selector" readonly placeholder="Click a button in the preview">
@@ -172,13 +172,17 @@ EDITOR_JS = r"""(() => {
     const doc = preview.contentDocument;
     if (!doc) return;
     const raw = event.target;
-    const target = raw?.closest?.(
+    // Many recorded UI buttons are plain DIV/SPAN elements. Let the
+    // researcher select them as well, rather than guessing an event target.
+    // No recorded scripts run, and form/editable controls remain excluded.
+    const interactive = raw?.closest?.(
       "a, button, input[type=button], input[type=submit], [role=button], [onclick], [tabindex]"
     );
+    const target = interactive || raw?.closest?.("div, span, label, section, article");
     if (!target || target.closest("form") || target.closest(
       "input:not([type=button]):not([type=submit]), textarea, [contenteditable]"
     )) {
-      status.textContent = "Select a non-form button or link.";
+      status.textContent = "Select a non-form button, link, or visual DIV/SPAN control.";
       return;
     }
     const selector = cssSelector(target, doc);
