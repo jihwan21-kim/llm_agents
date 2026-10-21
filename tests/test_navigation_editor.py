@@ -149,6 +149,15 @@ class NavigationEditorTests(unittest.TestCase):
         self.assertIn('id="preview"', EDITOR_HTML)
         self.assertIn('id="save"', EDITOR_HTML)
         self.assertIn('src="/__mock_capture/editor.js"', EDITOR_HTML)
+        # Locked states are visible only as inert, read-only recordings.
+        self.assertIn('sandbox="allow-same-origin"', EDITOR_HTML)
+        self.assertIn('fill(sourceSelect, state.steps, true)', EDITOR_JS)
+        self.assertIn('option.disabled = s.blocked && !allowReadOnly', EDITOR_JS)
+        self.assertIn('preview.style.pointerEvents = readOnly ? "none" : "auto"', EDITOR_JS)
+        self.assertIn('preview.src = stepPath(id)', EDITOR_JS)
+        self.assertIn('if (!current || current.blocked || !destination || destination.blocked)', EDITOR_JS)
+        self.assertIn('$("save").disabled = readOnly', EDITOR_JS)
+
         self.assertIn("stopImmediatePropagation", EDITOR_JS)
         node = shutil.which("node")
         if node:
