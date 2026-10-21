@@ -105,9 +105,17 @@ def temporal_dom_candidates(steps, transitions):
     preceding click caused it. Do not make these replayable action edges.
     """
     known = {(e.get("from"), e.get("to")) for e in transitions
-             if e.get("observed") and type(e.get("from")) is int
-             and type(e.get("to")) is int}
-    result = []
+             if type(e.get("from")) is int and type(e.get("to")) is int
+             and (e.get("observed") or e.get("temporal_observation"))}
+    result = [{
+        "from": e["from"], "to": e["to"],
+        "source": "recorded_dom_settle", "kind": "dom_settle_candidate",
+        "observed_action": False, "replayable": False,
+        "reason": "DOM state change recorded without attributable user action",
+    } for e in transitions
+        if e.get("temporal_observation") and type(e.get("from")) is int
+        and type(e.get("to")) is int and 0 <= e["from"] < len(steps)
+        and 0 <= e["to"] < len(steps)]
     for dest in range(1, len(steps)):
         current, previous = steps[dest], steps[dest - 1]
         if current.get("reason") != "dom-change" or (dest - 1, dest) in known:
