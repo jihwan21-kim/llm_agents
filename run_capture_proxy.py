@@ -455,8 +455,7 @@ class ConfiguredMailboxProxy(MockProxy):
         index = self._displayed_step(capture, path, query)
         # Only non-form states can execute our own offline simulator script.
         # Captured original site scripts are stripped by CaptureReplay.
-        csp = (self.REPLAY_CSP if index in self.benign_steps[capture.host]
-               else self.INERT_CSP)
+        csp = self.REPLAY_CSP
         flow.response.headers["Content-Security-Policy"] = csp
         flow.response.headers["X-Mock-Proxy"] = "offline-static-no-upstream"
 
