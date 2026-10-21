@@ -27,11 +27,12 @@ ALLOWED_FIELDS = {"email", "password", "tel", "number", "other"}
 
 class RecordedMockProxy(MockProxy):
     def __init__(self, directory, preview_dom_settling=False,
-                 trusted_fixture_js=False):
+                 trusted_fixture_js=False, agent_js_inspection=False):
         super().__init__()
         self.capture = CaptureReplay(
             directory, preview_dom_settling=preview_dom_settling,
-            trusted_fixture_js=trusted_fixture_js)
+            trusted_fixture_js=trusted_fixture_js,
+            agent_js_inspection=agent_js_inspection)
         if self.capture.host in {"mock.test"}:
             raise ValueError("Cannot shadow manager host")
         self.capture_events = []
@@ -201,14 +202,16 @@ class RecordedMockProxy(MockProxy):
         return self._respond(flow, status, body, mime)
 
 
-async def run(directory, preview_dom_settling=False, trusted_fixture_js=False):
+async def run(directory, preview_dom_settling=False, trusted_fixture_js=False,
+              agent_js_inspection=False):
     options = Options(listen_host="127.0.0.1", listen_port=8080,
                       confdir=str(ROOT / "mitm-ca"))
     master = DumpMaster(options)
     master.options.update(connection_strategy="lazy", upstream_cert=False,
                           stream_large_bodies=None, body_size_limit="1m")
     addon = RecordedMockProxy(directory, preview_dom_settling=preview_dom_settling,
-                              trusted_fixture_js=trusted_fixture_js)
+                              trusted_fixture_js=trusted_fixture_js,
+                              agent_js_inspection=agent_js_inspection)
     master.addons.add(addon)
     print("Dedicated proxy browser only. All upstream connections are DENIED.", flush=True)
     print("Open recorded URL:", addon.capture.start_url, flush=True)
@@ -216,6 +219,9 @@ async def run(directory, preview_dom_settling=False, trusted_fixture_js=False):
     print("Read-only JavaScript listing:",
           parts.scheme + "://" + parts.netloc + SCRIPT_INDEX,
           "(research inspection only; does not execute sources)", flush=True)
+    if agent_js_inspection:
+        print("RESEARCH SOURCE-VISIBLE MODE: Page includes a visible source index link.", flush=True)
+        print("Never use this condition as an unmodified page-fidelity baseline.", flush=True)
     print("Synthetic events: http://mock.test/__mock_capture/events", flush=True)
     await master.run()
 
@@ -228,9 +234,13 @@ if __name__ == "__main__":
     parser.add_argument("--trusted-fixture-js", action="store_true",
                         help="Execute only exact-hash, reviewed synthetic fixture.test app.js; "
                              "not available for captured external/phishing hosts")
+    parser.add_argument("--agent-js-inspection", action="store_true",
+                        help="Show a visible link to byte-preserved HAR JS sources; "
+                             "sources remain text-only and unexecuted")
     args = parser.parse_args()
     try:
         asyncio.run(run(args.recording, preview_dom_settling=args.preview_dom_settling,
-                        trusted_fixture_js=args.trusted_fixture_js))
+                        trusted_fixture_js=args.trusted_fixture_js,
+                        agent_js_inspection=args.agent_js_inspection))
     except KeyboardInterrupt:
         pass
