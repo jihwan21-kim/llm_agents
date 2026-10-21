@@ -276,3 +276,31 @@ history movement; the recorded operation names reflect that uncertainty.
 Do not re-enable recorded `<script>`, `onclick` or remote resources inside
 the replay. Doing so would make the security experiment capable of issuing
 uncontrolled network requests and would undermine its local-only guarantees.
+
+
+## When navigation-analysis.json shows zero HTML and JS targets
+
+A zero count is **not** evidence of a failed recording. SPA applications
+frequently use JS event handlers and in-memory state, not `href`/route
+literals. Auto-saved HTML intentionally lacks `<script>` and `onclick`,
+and not every JavaScript file's response body is preserved in the HAR.
+
+The enhanced analyzer distinguishes:
+- `html_coverage`: number of anchor, form, button and role-button tags
+  in saved HTML snapshots
+- `har_coverage`: number of script GET/HEAD resources, categorized by
+  first-party vs external/CDN origin, and how many bodies were inspectable
+- `graph`: actually observed navigation edges, which states are reachable
+  from the first recorded navigation, and which are disconnected
+
+It now **inspects** script bodies from external/CDN origins as well, but labels
+their literal path candidates `script_origin: external`, `verified: false`.
+Vendor JS may contain unrelated paths; no such hint becomes an observed
+transition or an automatic replay edge.
+
+Run `navigation_analysis.py` again on an old recording to get the extended
+diagnostics. If `js_route_hint_count` remains 0 despite script bodies being
+analyzed, that's compatible with dynamic framework navigation or purely
+in-memory UI changes. The **observed click graph** remains the primary
+source of evidence. Avoid re-enabling untrusted site scripts in the offline
+proxy just to make buttons work.
