@@ -128,7 +128,73 @@ class ReplayTests(unittest.TestCase):
         self.assertIn('const el = elementFor(e);', source)
         self.assertIn('el.closest(interactive) || el', source)
         self.assertIn('const chain = event.composedPath?.() || [];', replay)
-        self.assertIn('const edge = edges.find(e => e.kind === "click"', replay)
+        self.assertIn('const edge = bestEdge(target, "click");', replay)
+
+    def test_replay_prefers_specific_click_over_broad_no_change(self):
+        # Exercise the actual replay JS, not a Python duplicate of its
+        # matching algorithm. CI runners with Node execute this regression.
+        import ast
+        import shutil
+        import subprocess
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node is not installed")
+        source = (Path(__file__).resolve().parents[1] / "capture_replay.py").read_text()
+        tree = ast.parse(source)
+        sim = next(n.value.value for n in tree.body
+                   if isinstance(n, ast.Assign) and any(
+                       isinstance(t, ast.Name) and t.id == "SIM_JS" for t in n.targets
+                   ))
+        harness = r"""
+const vm = require("vm");
+const sim = SIMULATOR;
+class Element {}
+const main = new Element();
+const card = new Element();
+const inner = new Element();
+main.parentElement = null;
+card.parentElement = main;
+inner.parentElement = card;
+inner.closest = selector => {
+  if (selector === "body > main") return main;
+  if (selector === "body > main > div:nth-of-type(12)") return card;
+  return null;
+};
+let clickedUrl = null;
+let posted = null;
+const listeners = {};
+const document = {
+  currentScript: {dataset: {step: "1", transitions: JSON.stringify([
+    {kind:"click", selector:"body > main", to:1, outcome:"no-change", observed:true},
+    {kind:"click", selector:"body > main > div:nth-of-type(12)", to:2,
+     to_path:"/a/b", outcome:"changed", observed:true}
+  ])}},
+  addEventListener: (name, fn) => {listeners[name] = fn;},
+  querySelectorAll: () => []
+};
+vm.runInNewContext(sim, {
+  document, Element, console, URL,
+  location: {origin:"https://example.test", assign: url => {clickedUrl = url;}},
+  fetch: async (url, options) => {
+    posted = JSON.parse(options.body);
+    return {ok:true};
+  }
+});
+listeners.click({
+  composedPath: () => [inner],
+  target:inner,
+  preventDefault: () => {}
+});
+setTimeout(() => {
+  if (clickedUrl !== "/a/b?__mock_step=2" || posted?.to !== 2) {
+    console.error("Wrong chosen transition:", clickedUrl, posted);
+    process.exit(1);
+  }
+}, 30);
+""".replace("SIMULATOR", json.dumps(sim))
+        completed = subprocess.run([node, "-e", harness], capture_output=True,
+                                   text=True, timeout=10, check=False)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_entry_skips_unaimed_loading_states(self):
         with tempfile.TemporaryDirectory() as t:

@@ -196,3 +196,22 @@ screens with `?__mock_step=0` etc.
 
 This is a best-effort entry-state selection, not a reconstruction of missing
 actions. Previously unrecorded clicks cannot be inferred from HAR alone.
+
+
+## Fix for a broad click swallowing a specific button transition
+
+Some recordings have both a broad `no-change` edge (for example
+`1 -> 1 click body > main`) and a deeper `changed` edge
+(`1 -> 2 click body > main > div:nth-of-type(12)`).
+The old replay selected the **first matching edge**. Since every child
+inside `main` also matches `body > main`, that no-op edge intercepted
+real navigation clicks.
+
+The simulator now selects the **closest, most specific matching recorded
+element**, and prefers a changed edge when matching selectors are otherwise
+equivalent. This only selects among actually observed edges; it does not
+invent transitions or allow original scripts to run.
+
+This fix applies to existing recordings. Pull the latest main, stop the
+current mock proxy and restart it with the **same recording folder**;
+no new live-site capture is needed for this issue.
