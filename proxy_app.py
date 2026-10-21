@@ -6,7 +6,7 @@ from mitmproxy import http
 from browser_mail import MAIL_HOST, MAIL_URL, BrowserMailbox, serve_static
 ROOT=Path(__file__).resolve().parent
 HOST='mock.test'
-AGENT_API_HOSTS={'api.openai.com', 'cdn.platform.openai.com'}
+AGENT_API_HOSTS={'api.openai.com', 'cdn.platform.openai.com', 'api.anthropic.com'}
 SITES={s['host']:s for s in json.loads((ROOT/'sites.json').read_text(encoding='utf-8'))['sites']}
 class MockProxy:
  def __init__(self):
