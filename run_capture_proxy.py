@@ -11,6 +11,8 @@ from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from capture_replay import CaptureReplay, SCRIPT_INDEX
+from navigation_editor import (NavigationEditError, EDITOR, EDITOR_JS_PATH,
+                               EDITOR_STATE, EDITOR_SAVE, EDITOR_HTML, EDITOR_JS)
 from gym.fixture_receipt import parse_fixture_receipt, FixtureReceiptError
 from proxy_app import MockProxy
 
@@ -27,8 +29,16 @@ ALLOWED_FIELDS = {"email", "password", "tel", "number", "other"}
 
 class RecordedMockProxy(MockProxy):
     def __init__(self, directory, preview_dom_settling=False,
-                 trusted_fixture_js=False, agent_js_inspection=False):
+                 trusted_fixture_js=False, agent_js_inspection=False,
+                 edit_navigation=False):
         super().__init__()
+        if edit_navigation and trusted_fixture_js:
+            raise ValueError("Cannot combine navigation editor and trusted JS runtime")
+        self.edit_navigation = bool(edit_navigation)
+        self.replay_settings = dict(
+            preview_dom_settling=preview_dom_settling,
+            trusted_fixture_js=trusted_fixture_js,
+            agent_js_inspection=agent_js_inspection)
         self.capture = CaptureReplay(
             directory, preview_dom_settling=preview_dom_settling,
             trusted_fixture_js=trusted_fixture_js,
@@ -66,7 +76,11 @@ class RecordedMockProxy(MockProxy):
             "Cache-Control": "no-store",
             "X-Mock-Proxy": "offline-no-upstream",
             "X-Content-Type-Options": "nosniff",
-            "Content-Security-Policy": CSP,
+            "Content-Security-Policy": (
+                CSP.replace("frame-src 'none'", "frame-src 'self'")
+                   .replace("frame-ancestors 'none'", "frame-ancestors 'self'")
+                if self.edit_navigation and flow.request.host == self.capture.host
+                else CSP),
         })
 
     def _metadata_log(self, kind, path, method):
