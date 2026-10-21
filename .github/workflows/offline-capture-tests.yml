@@ -55,6 +55,13 @@ on:
       - tests/test_approved_mock_generator.py
       - gym/FUNCTIONAL_REPLAY.md
       - automatic_capture.py
+      - diagnose-mock-https.py
+      - check-mock-https-windows.bat
+      - trust-project-ca-windows.bat
+      - trust-project-ca-windows.ps1
+      - tests/test_live_post_capture.py
+      - tests/test_mock_https_diagnostic.py
+      - CAPTURE_REPLAY.md
       - navigation_analysis.py
       - .github/workflows/offline-capture-tests.yml
 jobs:
