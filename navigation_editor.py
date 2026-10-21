@@ -118,6 +118,8 @@ iframe{width:100%;flex:1;border:0;background:white;min-height:0}
 <button id="save" class="primary" type="button">Save connection</button>
 <button id="test" type="button">Preview selected destination (read-only)</button>
 <button id="sourcePreview" type="button">Return to source screen</button>
+<button id="previousRecorded" type="button">← Previous recorded screen</button>
+<button id="nextRecorded" type="button">Next recorded screen →</button>
 <div id="message" role="status" aria-live="polite"></div>
 <div class="muted">All recorded destinations can be selected for read-only preview. Saving a connection is supported only between non-sensitive screens on the same origin. Locked destinations cannot be connected.</div>
 </div></section>
@@ -225,6 +227,9 @@ EDITOR_JS = r"""(() => {
     $("save").disabled = !canEdit;
     $("test").disabled = !dest;
     $("sourcePreview").disabled = !src;
+    $("previousRecorded").disabled = !state || previewStepId === null || previewStepId <= 0;
+    $("nextRecorded").disabled = !state || previewStepId === null ||
+      previewStepId >= state.steps.length - 1;
     if (dest?.blocked && !previewOnly)
       status.textContent = "This destination can be previewed, but cannot be connected.";
   }
@@ -321,6 +326,17 @@ EDITOR_JS = r"""(() => {
   sourceSelect.addEventListener("change", () => loadPreview(Number(sourceSelect.value)));
   targetSelect.addEventListener("change", updateSaveAvailability);
   $("sourcePreview").addEventListener("click", () => loadPreview(Number(sourceSelect.value)));
+  function browseRecorded(delta) {
+    const next = previewStepId + delta;
+    if (!state || !Number.isSafeInteger(next) || next < 0 ||
+        next >= state.steps.length) return;
+    targetSelect.value = String(next);
+    // Chronological snapshot browsing is an inspection action only:
+    // it never stores a new observed/manual link and never submits forms.
+    loadPreview(next, true);
+  }
+  $("previousRecorded").addEventListener("click", () => browseRecorded(-1));
+  $("nextRecorded").addEventListener("click", () => browseRecorded(1));
   $("save").addEventListener("click", () => {
     const from = Number(sourceSelect.value);
     const to = Number(targetSelect.value);
