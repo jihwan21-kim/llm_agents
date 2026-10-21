@@ -10,6 +10,7 @@ HOST='mock.test'
 AGENT_API_HOSTS={
  'api.openai.com', 'cdn.platform.openai.com', 'api.anthropic.com',
  'claude.ai', 'platform.claude.com', 's-cdn.anthropic.com',
+ 'assets-proxy.anthropic.com',
  'accounts.google.com', 'oauth2.googleapis.com', 'www.googleapis.com',
  'ssl.gstatic.com', 'www.gstatic.com', 'translate.googleapis.com',
 }
