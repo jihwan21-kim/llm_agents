@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - capture_replay.py
+      - fidelity_audit.py
+      - tests/test_fidelity_audit.py
       - run_capture_proxy.py
       - record_site.py
       - tests/test_capture_replay.py
