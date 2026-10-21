@@ -146,6 +146,8 @@ class Recorder:
         self.seen_mutation = False
         self.mutation_started = None
         self.saved_signature = ""
+        self.current_index = -1
+        self.state_index = {}
         page.on("console", self.on_console)
 
     def on_console(self, msg):
@@ -168,7 +170,7 @@ class Recorder:
                     "kind": event["kind"],
                     "selector": str(event.get("selector", ""))[:256],
                     "tag": str(event.get("tag", ""))[:32],
-                    "from": len(self.steps) - 1,
+                    "from": self.current_index,
                     "started": now,
                 }
             self.last_change = now
@@ -189,31 +191,40 @@ class Recorder:
         signature = hashlib.sha256((url + "\n" + html).encode()).hexdigest()
         if self.steps and signature == self.saved_signature:
             return False
-        if len(self.steps) >= self.limit:
-            print(f"Reached max {self.limit} snapshots; use q to finish.")
-            return False
-        idx = len(self.steps)
-        filename = f"step-{idx:03d}"
-        (self.out / (filename + ".html")).write_text(html, encoding="utf-8")
-        try:
-            self.page.screenshot(path=str(self.out / (filename + ".png")), full_page=True,
-                                 timeout=8000, animations="disabled")
-        except Exception:
-            print("Screenshot failed for step", idx)
-        self.steps.append({
-            "index": idx, "url": url, "html": filename + ".html",
-            "screenshot": filename + ".png", "reason": reason,
-            "fingerprint": signature,
-        })
-        self.saved_signature = signature
+        # Revisiting a byte-identical recorded DOM is a graph edge, not a
+        # new screen. This allows branches from the same starting state.
+        revisited = signature in self.state_index
+        if revisited:
+            idx = self.state_index[signature]
+        else:
+            if len(self.steps) >= self.limit:
+                print(f"Reached max {self.limit} snapshots; use q to finish.")
+                return False
+            idx = len(self.steps)
+            filename = f"step-{idx:03d}"
+            (self.out / (filename + ".html")).write_text(html, encoding="utf-8")
+            try:
+                self.page.screenshot(path=str(self.out / (filename + ".png")), full_page=True,
+                                     timeout=8000, animations="disabled")
+            except Exception:
+                print("Screenshot failed for step", idx)
+            self.steps.append({
+                "index": idx, "url": url, "html": filename + ".html",
+                "screenshot": filename + ".png", "reason": reason,
+                "fingerprint": signature,
+            })
+            self.state_index[signature] = idx
         if self.pending and self.pending["from"] >= 0:
             edge = {k: self.pending[k] for k in ["kind", "selector", "tag", "from"]}
             edge.update({"to": idx, "outcome": "changed", "observed": True})
-            self.transitions.append(edge)
+            if edge not in self.transitions:
+                self.transitions.append(edge)
+        self.current_index = idx
+        self.saved_signature = signature
         self.pending = None
         self.seen_mutation = False
         self.mutation_started = None
-        print(f"Auto snapshot {idx}: {reason} ({url})")
+        print(f"{'Revisited' if revisited else 'Auto snapshot'} {idx}: {reason} ({url})")
         return True
 
     def poll(self):
@@ -251,7 +262,7 @@ class Recorder:
         self.snapshot("final")
         if self.pending and self.pending["from"] >= 0:
             edge = {k: self.pending[k] for k in ["kind", "selector", "tag", "from"]}
-            edge.update({"to": len(self.steps) - 1, "outcome": "final", "observed": True})
+            edge.update({"to": self.current_index, "outcome": "final", "observed": True})
             self.transitions.append(edge)
         return self.steps, self.transitions
 

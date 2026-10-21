@@ -57,6 +57,59 @@ class ReplayTests(unittest.TestCase):
             source = (root / script).read_text(encoding="utf-8")
             compile(source, script, "exec")
 
+    def test_auto_recorder_revisited_state_reuses_branch_node(self):
+        # Extract the recorder class without importing Playwright in unit tests.
+        import ast
+        import hashlib
+        import time
+        source = (Path(__file__).resolve().parents[1] / "automatic_capture.py").read_text()
+        tree = ast.parse(source)
+        recorder_class = next(node for node in tree.body
+                              if isinstance(node, ast.ClassDef) and node.name == "Recorder")
+        unit = ast.Module(body=[recorder_class], type_ignores=[])
+        scope = {"hashlib": hashlib, "time": time, "json": json,
+                 "MARKER": "__MOCK_AUTO_EVENT__", "SNAPSHOT_JS": ""}
+        exec(compile(unit, "automatic_capture.py", "exec"), scope)
+        Recorder = scope["Recorder"]
+
+        class FakePage:
+            def __init__(self):
+                self.url = "https://example.test/home"
+                self.content = "<html><body><button id='a'>A</button><button id='b'>B</button></body></html>"
+            def on(self, event, callback):
+                pass
+            def evaluate(self, code):
+                return self.content
+            def screenshot(self, path, **kwargs):
+                Path(path).write_bytes(b"PNG")
+
+        class Msg:
+            def __init__(self, obj):
+                self.text = "__MOCK_AUTO_EVENT__" + json.dumps(obj)
+
+        with tempfile.TemporaryDirectory() as d:
+            page = FakePage()
+            recorder = Recorder(page, Path(d), 12)
+            self.assertTrue(recorder.snapshot("initial"))
+            recorder.on_console(Msg({"kind":"click", "selector":"#a", "tag":"button"}))
+            page.url = "https://example.test/a"
+            page.content = "<html><body><p>A screen</p></body></html>"
+            self.assertTrue(recorder.snapshot("click"))
+            recorder.on_console(Msg({"kind":"click", "selector":"#back", "tag":"button"}))
+            page.url = "https://example.test/home"
+            page.content = "<html><body><button id='a'>A</button><button id='b'>B</button></body></html>"
+            self.assertTrue(recorder.snapshot("click"))
+            self.assertEqual(len(recorder.steps), 2)  # Revisit is not a new node.
+            self.assertEqual(recorder.current_index, 0)
+            recorder.on_console(Msg({"kind":"click", "selector":"#b", "tag":"button"}))
+            page.url = "https://example.test/b"
+            page.content = "<html><body><p>B screen</p></body></html>"
+            recorder.snapshot("click")
+            self.assertEqual(len(recorder.steps), 3)
+            branches = [e for e in recorder.transitions if e["from"] == 0]
+            self.assertEqual({(e["selector"], e["to"]) for e in branches},
+                             {("#a", 1), ("#b", 2)})
+
     def test_recorded_branches_not_arbitrary_next_step(self):
         with tempfile.TemporaryDirectory() as t:
             self.make_recording(t)
