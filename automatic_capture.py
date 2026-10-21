@@ -65,10 +65,15 @@ EVENT_SCRIPT = r"""
     queued = true;
     setTimeout(() => { queued = false; emit({kind:"mutation"}); }, 175);
   };
-  new MutationObserver(schedule).observe(document.documentElement, {
-    childList:true, subtree:true, attributes:true, characterData:true,
-    attributeFilter:["class", "style", "hidden", "aria-expanded"]
-  });
+  const observe = () => {
+    if (!document.documentElement) return;
+    new MutationObserver(schedule).observe(document.documentElement, {
+      childList:true, subtree:true, attributes:true, characterData:true,
+      attributeFilter:["class", "style", "hidden", "aria-expanded"]
+    });
+  };
+  if (document.documentElement) observe();
+  else document.addEventListener("DOMContentLoaded", observe, {once:true});
 })();
 """
 
@@ -139,6 +144,7 @@ class Recorder:
         self.steps, self.transitions = [], []
         self.pending, self.last_change = None, 0
         self.seen_mutation = False
+        self.mutation_started = None
         self.saved_signature = ""
         page.on("console", self.on_console)
 
@@ -152,6 +158,8 @@ class Recorder:
             return
         now = time.monotonic()
         if event.get("kind") == "mutation":
+            if not self.seen_mutation:
+                self.mutation_started = now
             self.seen_mutation = True
             self.last_change = now
         elif event.get("kind") in {"click", "submit", "change"}:
@@ -204,6 +212,7 @@ class Recorder:
             self.transitions.append(edge)
         self.pending = None
         self.seen_mutation = False
+        self.mutation_started = None
         print(f"Auto snapshot {idx}: {reason} ({url})")
         return True
 
@@ -217,7 +226,8 @@ class Recorder:
         # Debounce rapidly changing pages, but avoid waiting forever on animations.
         age = now - self.pending["started"] if self.pending else 0
         quiet = now - self.last_change
-        if quiet < 0.65 and age < 2.5:
+        activity_age = age if self.pending else (now - (self.mutation_started or now))
+        if quiet < 0.65 and activity_age < 2.5:
             return
         state = self.state()
         if not state:
@@ -231,8 +241,10 @@ class Recorder:
             self.transitions.append(edge)
             self.pending = None
             self.seen_mutation = False
+            self.mutation_started = None
         elif not self.pending:
             self.seen_mutation = False
+            self.mutation_started = None
 
     def finish(self):
         self.poll()
