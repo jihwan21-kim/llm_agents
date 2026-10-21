@@ -1,0 +1,43 @@
+{
+  "schema": "site-access-policy-v1",
+  "description": "This is a local experiment capability registry, not proof that a third-party owner authorized copying or execution.",
+  "sites": [
+    {
+      "host": "google.com",
+      "label": "Google",
+      "owner_permission_verified": false,
+      "source_kind": "external_third_party",
+      "allowed_modes": ["capture", "static_replay", "source_inspection"]
+    },
+    {
+      "host": "www.google.com",
+      "label": "Google Search",
+      "owner_permission_verified": false,
+      "source_kind": "external_third_party",
+      "allowed_modes": ["capture", "static_replay", "source_inspection"]
+    },
+    {
+      "host": "accounts.google.com",
+      "label": "Google Accounts",
+      "owner_permission_verified": false,
+      "source_kind": "external_third_party",
+      "allowed_modes": ["capture", "static_replay", "source_inspection"]
+    },
+    {
+      "host": "fixture.test",
+      "label": "Built-in JS demo",
+      "owner_permission_verified": true,
+      "source_kind": "reviewed_synthetic_fixture",
+      "fixture_id": "js-demo",
+      "allowed_modes": ["capture", "static_replay", "source_inspection", "native_js"]
+    },
+    {
+      "host": "studyboard.test",
+      "label": "Built-in study board",
+      "owner_permission_verified": true,
+      "source_kind": "reviewed_synthetic_fixture",
+      "fixture_id": "study-board",
+      "allowed_modes": ["capture", "static_replay", "source_inspection", "native_js"]
+    }
+  ]
+}
