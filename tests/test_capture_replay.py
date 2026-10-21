@@ -68,7 +68,7 @@ class ReplayTests(unittest.TestCase):
                               if isinstance(node, ast.ClassDef) and node.name == "Recorder")
         unit = ast.Module(body=[recorder_class], type_ignores=[])
         scope = {"hashlib": hashlib, "time": time, "json": json,
-                 "MARKER": "__MOCK_AUTO_EVENT__"}
+                 "MARKER": "__MOCK_AUTO_EVENT__", "SNAPSHOT_JS": ""}
         exec(compile(unit, "automatic_capture.py", "exec"), scope)
         Recorder = scope["Recorder"]
 
