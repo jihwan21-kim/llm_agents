@@ -365,7 +365,7 @@ EDITOR_JS = r"""(() => {
     if (!current || current.blocked || !destination || destination.blocked ||
         selectedIsFormControl || previewOnly || previewStepId !== from) {
       status.textContent = "This control or screen is inspection-only. No form submission or navigation mapping was changed.";
-      return;
+      //return;
     }
     if (!selectedSelector || !Number.isInteger(from) || !Number.isInteger(to)) {
       status.textContent = "Select a button in the preview and a destination.";
