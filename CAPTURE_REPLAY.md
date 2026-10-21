@@ -539,3 +539,41 @@ git pull origin main
 ```
 
 This preserves the deny-upstream proxy and existing recorded transitions.
+
+## Reviewed original-JavaScript replay (synthetic fixture only)
+
+Original JS source is important to agents with Chrome debugging/source tools,
+but a loaded JS resource is not proof the agent read its source. To separate
+**original executable source** from static simulation, there is now one
+explicitly trusted, first-party synthetic fixture mode.
+
+Build an offline capture directly from packaged reviewed source (no remote URL
+is fetched). On Windows, from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe .\gym\build_js_fixture_recording.py --output ".\recordings\js-demo-trusted"
+.\start-har-mock-windows.bat ".\recordings\js-demo-trusted" --trusted-fixture-js
+```
+
+Open the dedicated proxy Chrome and navigate to **https://fixture.test/**.
+Only the exact-byte, SHA-256-matching bundled `gym/fixtures/js-demo/app.js`
+is provided as executable `text/javascript`, and it attaches native DOM
+listeners to the synthetic product-selection/basket interface. The ordinary
+offline replay simulator is **not** injected in this mode. JavaScript
+modifications appear in the live DOM without stepping through snapshots.
+The originally authored JS is available to source-capable agents through
+DevTools/source inspection. CSS is still served from the captured HAR.
+
+**Safety boundary:** `--trusted-fixture-js` is limited by code to the
+synthetic `https://fixture.test/` origin and the exact source digest of
+the reviewed bundled demo. Unknown/changed JS, inline scripts, captured
+third-party scripts, original event-handler attributes and external-site
+recordings remain inert. The proxy still denies upstream connections and
+all non-synthetic writes. The mode does *not* clone or activate an
+untrusted recorded site's login, payment, credential capture or backend.
+
+This is the first implementation of a functional JavaScript replay
+mechanism for an authorized fixture, **not** an automatic
+original-JavaScript clone of recorded phishing-like sites. The ordinary
+`--preview-dom-settling` mode remains unchanged. Use the fidelity
+audit to report original-site differences rather than assuming parity.
