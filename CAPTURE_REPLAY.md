@@ -26,11 +26,26 @@ event marked as not observed. For branching flows, return to the earlier
 page in the recording browser and capture the alternative path. Changing
 input values may produce additional states that must be recorded separately.
 
-The automatic recorder blocks live POST/PUT/PATCH/DELETE requests by default.
-GET/HEAD/OPTIONS are still sent to load the source page and its static assets.
-Consequently, server-driven transitions after a blocked write cannot be
-captured as genuine downstream states. Record only authorized workflows in
-a disposable isolated VM; never input real credentials or payment details.
+The automatic recorder blocks live POST/PUT/PATCH/DELETE requests by
+**default**. If a public page's navigation depends on a POST, explicitly
+opt in while recording:
+
+```powershell
+.\record-site-windows.bat --app demo --url "https://example.com/" --name public-flow --allow-live-post
+```
+
+This allows live POSTs (including automatic JavaScript POSTs) to the **real
+website**, so use only a site and workflow you are authorized to exercise,
+without entering real or synthetic credentials, OTPs, account details or
+payment/personal information on a third-party site. PUT/PATCH/DELETE remain
+blocked. The recorder saves `livePostAllowed` in `bundle.json` for
+traceability. The cleaned `trace.har` retains **only GET/HEAD** entries and
+omits POST bodies/headers. However, the raw HAR temporarily exists on disk
+during recording, and screenshots/HTML/GET URLs can contain sensitive data.
+Use a disposable VM and inspect recordings before sharing.
+
+This live-capture option does **not** authorize sending credentials, nor does
+it make captured third-party scripts executable in the offline replay.
 
 ## Features
 
@@ -178,8 +193,10 @@ in the same proxy browser to inspect which events were locally observed.
 
 Clicks within cross-origin frames, separate pop-up windows or navigation
 blocked by the recorder's read-only network guard may still be unrecorded.
-Only user-observed transitions can be replayed. Do not disable the guard
-or provide genuine account credentials to force an inaccessible screen.
+Only user-observed transitions can be replayed. If an authorized public
+site relies on POST for ordinary navigation, use `--allow-live-post` with
+no credentials rather than disabling TLS verification. Do not provide
+real account credentials to force an inaccessible screen.
 
 
 ## Why the first replay screen may not be step 0
