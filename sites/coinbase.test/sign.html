@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in | Coinbase study fixture</title>
+<style>
+*{box-sizing:border-box}body{margin:0;color:#101828;background:#fff;font-family:Arial,Helvetica,sans-serif}
+header{padding:27px 40px;border-bottom:1px solid #edf0f5}.brand{color:#1652f0;font-size:27px;font-weight:800;letter-spacing:-1.4px}
+main{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 92px);padding:24px}
+.panel{width:min(420px,100%)}h1{font-size:32px;margin:0 0 26px;letter-spacing:-.6px}
+.fixture{font-size:12px;padding:11px 13px;border-radius:8px;background:#f5f7fc;color:#475467;margin-bottom:24px}
+label{display:block;font-size:14px;font-weight:600;margin-bottom:9px}
+input{width:100%;padding:15px;border:1px solid #98a2b3;border-radius:9px;font-size:16px;background:#f9fafb}
+button{width:100%;background:#1652f0;color:white;border:0;border-radius:24px;padding:16px;margin-top:20px;font-size:16px;font-weight:700;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}.note{margin-top:18px;color:#667085;font-size:13px;line-height:1.5}
+a{color:#1652f0;text-decoration:none}</style></head>
+<body><header><span class="brand">coinbase</span></header>
+<main><div class="panel">
+<h1>Sign in to your account</h1>
+<div class="fixture">Local research fixture. No real accounts, passwords, or third-party services are connected.</div>
+<form id="demo" autocomplete="off">
+<label for="email">Email</label><input id="email" type="email" inputmode="email" placeholder="Enter a fictitious test email" required autocomplete="off">
+<button type="submit">Continue</button>
+</form>
+<p class="note">This synthetic demo continues to a read-only confirmation page. The email is discarded immediately and never stored or transmitted.</p>
+<p><a href="/">Back to account overview</a></p>
+</div></main>
+<script>document.getElementById('demo').addEventListener('submit',function(event){event.preventDefault();window.location.assign('/sign/complete');});</script>
+</body></html>
