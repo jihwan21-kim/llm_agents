@@ -1,3 +1,35 @@
+## Live POST capture (explicit opt-in)
+
+The automatic recorder now supports public-site POST-driven navigation:
+
+```powershell
+.\record-site-windows.bat --app sample --url "https://example.com/" --name public-steps --allow-live-post
+```
+
+The default **still blocks POST**. With this flag, the browser sends POST
+requests to the **real website** (not just locally), so only use approved
+non-sensitive public flows. No live account/credential/payment submissions.
+PUT/PATCH/DELETE remain blocked; the cleaned HAR still discards POST bodies
+and requests. See [CAPTURE_REPLAY.md](CAPTURE_REPLAY.md).
+
+## HTTPS warning on browser inbox
+
+If Chrome says **"주의 요함" / "Not secure"** at
+`https://inbox.cedarpostmail.net/`, verify that the project-specific
+`mitm-ca/mitmproxy-ca-cert.cer` is trusted, **not** some other installation's
+CA. With the mock proxy running:
+
+```powershell
+.\check-mock-https-windows.bat
+```
+
+When and only when the tool says the project CA is untrusted, the
+`.\trust-project-ca-windows.bat` helper offers a clearly confirmed
+`CurrentUser\Root` import. Restart the dedicated Chrome afterward.
+The CA must be used only in a disposable experiment VM/user because it
+can authenticate arbitrary hostnames. Do not disable TLS verification.
+More details: [gym/BROWSER_MAILBOX.md](gym/BROWSER_MAILBOX.md).
+
 ## Chrome inbox start page (browser-only)
 
 The dedicated proxy Chrome now starts at
