@@ -9,3 +9,6 @@ logs/
 runs/
 __pycache__/
 *.pyc
+
+# Browser capture data may contain private URLs and page contents.
+recordings/
