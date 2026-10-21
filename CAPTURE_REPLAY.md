@@ -4,6 +4,32 @@ This single repository now contains the Playwright recorder and local
 mitmproxy replay server. The recorder is an independent Python implementation,
 not a copy of Nevin's private agent-sandbox code.
 
+## Automatic workflow capture (updated)
+
+The Windows recorder now automatically saves a DOM + screenshot when a click,
+form submission, change, URL navigation, or significant DOM mutation produces
+a new screen. There is no need to type 's' after every button. It also
+records action selectors and their observed next state in transitions.json
+and bundle.json. Press **q + Enter** in the terminal to finish; **s + Enter**
+remains available for a manual snapshot when desired.
+
+    .\record-site-windows.bat --app sample --url "https://example.com/" --name auto-test
+
+The file assets.json catalogs exported CSS, images and fonts from the embedded
+HAR, alongside the copied files under assets/. HAR still contains captured
+static resources and inert JavaScript bytes, but replay **never executes the
+original JavaScript**. Complete script-driven UI fidelity is not guaranteed.
+
+Replay now follows observed action-to-state edges, not a universal next-step
+counter. Unobserved buttons remain on the current state and produce a local
+event marked as not observed. For branching flows, return to the earlier
+page in the recording browser and capture the alternative path. Changing
+input values may produce additional states that must be recorded separately.
+
+Browser interactions with the live source can still send requests to the
+source site while RECORDING. Do not test submission with real data. Record only
+authorized research workflows in a disposable isolated VM.
+
 ## Features
 
 1. Capture a live authorized site with Playwright: HAR, HTML snapshots,
@@ -34,7 +60,8 @@ First record an innocuous example:
 
 For an authorized research site, use its URL instead. Use the separate
 Chrome window to navigate. In the recording PowerShell console, type:
-- s then Enter: save DOM + screenshot now.
+- No key required: changed screens and action transitions are saved automatically.
+- s then Enter: optionally force a manual snapshot.
 - q then Enter: save final state, close browser, write HAR and metadata.
 
 The console prints the exact recording directory. Example (replace date):
@@ -64,8 +91,8 @@ For recorded HTTPS sites, trust the existing mitmproxy test CA in your
 isolated experiment VM following the main README certificate instructions.
 Do not turn off certificate validation to bypass warnings.
 
-The page can progress through saved snapshots using simulated form submits
-or standalone button clicks. The URL retains its hostname and entry path;
+The page follows recorded action selectors to saved snapshots using simulated
+form submits or buttons. The URL retains its hostname and recorded paths;
 a query parameter __mock_step=1 selects subsequent snapshots. For manual
 inspection, append that parameter at the recorded entry path.
 
@@ -83,7 +110,9 @@ Recordings are under recordings/<app>/<run-id>/:
 - bundle.json: workflow metadata and snapshot URLs
 - trace.har: sanitized GET/HEAD response bodies for offline assets
 - step-000.html and step-000.png: HTML and screenshot
-- actions.json: click/submit event types, no typed values
+- transitions.json: recorded action selector, source and destination state
+- assets.json and assets/: extracted CSS, image and font files
+- actions are retained in transitions.json, without typed values
 
 Recordings are gitignored but can still contain private DOM content, assets,
 query strings, and screenshots. Review before sharing.
