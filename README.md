@@ -1,3 +1,15 @@
+## Site allowlist and Google recording policy
+
+`gym/site_access_policy.json` holds explicit per-host capabilities. Google
+(`google.com`, `www.google.com`, `accounts.google.com`) is registered
+for capture, static mock and read-only original JS inspection, **not**
+arbitrary original-JS execution; adding a third-party site to a JSON file
+does not prove site-owner authorization. A new
+`start-policy-har-mock-windows.bat "<recording-folder>"` checks that exact
+host before launching the usual sanitized offline mock. Native JavaScript
+loading in F12 Sources > Page remains limited to the reviewed in-repository
+synthetic `.test` fixtures. [Policy and commands](gym/SITE_ACCESS_POLICY.md).
+
 ## View original recorded JavaScript in Chrome F12 Sources
 
 Export captured HAR scripts for Chrome's **Sources > Workspace** panel
