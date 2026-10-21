@@ -272,6 +272,46 @@ setTimeout(() => {
             self.assertNotIn("external.test", rendered)
             self.assertEqual(replay.respond("GET", "/login", "__mock_step=1")[0], 200)
 
+    def test_history_navigation_is_recorded_as_a_graph_edge(self):
+        import ast
+        import hashlib
+        import time
+        source = (Path(__file__).resolve().parents[1] / "automatic_capture.py").read_text()
+        tree = ast.parse(source)
+        node = next(n for n in tree.body
+                    if isinstance(n, ast.ClassDef) and n.name == "Recorder")
+        scope = {"hashlib":hashlib, "time":time, "json":json,
+                 "MARKER":"__MOCK_AUTO_EVENT__", "SNAPSHOT_JS":""}
+        exec(compile(ast.Module(body=[node], type_ignores=[]),
+                     "automatic_capture.py", "exec"), scope)
+
+        class Page:
+            def __init__(self):
+                self.url = "https://example.test/start"
+                self.dom = "<html><body>Start</body></html>"
+                self.main_frame = object()
+            def on(self, kind, callback):
+                pass
+            def evaluate(self, code):
+                return self.dom
+            def screenshot(self, path, **kwargs):
+                Path(path).write_bytes(b"PNG")
+
+        class Message:
+            text = '__MOCK_AUTO_EVENT__{"kind":"history","operation":"popstate"}'
+
+        with tempfile.TemporaryDirectory() as t:
+            page = Page()
+            rec = scope["Recorder"](page, Path(t), 10)
+            rec.snapshot("initial")
+            rec.on_console(Message())
+            page.url = "https://example.test/back"
+            page.dom = "<html><body>Back</body></html>"
+            rec.snapshot("browser_navigation")
+            self.assertEqual(rec.transitions[0]["kind"], "browser_navigation")
+            self.assertEqual((rec.transitions[0]["from"], rec.transitions[0]["to"]), (0, 1))
+            self.assertEqual(rec.navigation_events[0]["operation"], "popstate")
+
     def test_entry_skips_unaimed_loading_states(self):
         with tempfile.TemporaryDirectory() as t:
             self.make_recording(t)
