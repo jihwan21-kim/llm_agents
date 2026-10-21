@@ -573,6 +573,13 @@ def main():
     print(f"Navigation clues: {navigation_report['html_route_count']} HTML links/forms, "
           f"{navigation_report['js_route_hint_count']} JavaScript literal routes.")
     clicks = sum(a["kind"] == "click" for a in recorder.action_events)
+    stats = {}
+    for a in recorder.action_events:
+        outcome = a.get("outcome", "unknown")
+        stats[outcome] = stats.get(outcome, 0) + 1
+    print("Action outcomes:", json.dumps(stats, sort_keys=True))
+    print(f"Blocked live writes: {len(recorder.blocked_writes)}. "
+          "See action-events.json and blocked-writes.json for diagnostics.")
     print(f"Saved {len(steps)} states, {len(transitions)} action edges, {assets} assets and {count} HAR entries.")
     print(f"Captured {clicks} clicks and {len(recorder.action_events)} total user actions.")
     if len(steps) > 1 and not transitions:
