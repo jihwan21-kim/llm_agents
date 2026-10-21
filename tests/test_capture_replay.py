@@ -122,6 +122,69 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(recorder.transitions[-1]["to"], 3)
             self.assertEqual(len(recorder.action_events), 4)
 
+    def test_dom_settling_not_claimed_as_user_action(self):
+        import ast
+        import hashlib
+        import time
+        source = (Path(__file__).resolve().parents[1] / "automatic_capture.py").read_text()
+        tree = ast.parse(source)
+        klass = next(n for n in tree.body
+                     if isinstance(n, ast.ClassDef) and n.name == "Recorder")
+        scope = {"hashlib":hashlib, "time":time, "json":json,
+                 "MARKER":"__MOCK_AUTO_EVENT__", "SNAPSHOT_JS":""}
+        exec(compile(ast.Module(body=[klass], type_ignores=[]),
+                     "automatic_capture.py", "exec"), scope)
+
+        class Page:
+            def __init__(self):
+                self.url = "https://example.test/page"
+                self.dom = "<html>initial</html>"
+            def on(self, kind, callback):
+                pass
+            def evaluate(self, code):
+                return self.dom
+            def screenshot(self, path, **kwargs):
+                Path(path).write_bytes(b"PNG")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Page()
+            recorder = scope["Recorder"](page, Path(tmp), 10)
+            recorder.snapshot("initial")
+            page.dom = "<html>loaded</html>"
+            recorder.snapshot("dom-change")
+            self.assertEqual(len(recorder.transitions), 1)
+            edge = recorder.transitions[0]
+            self.assertEqual((edge["from"], edge["to"]), (0, 1))
+            self.assertEqual(edge["kind"], "dom_settle")
+            self.assertFalse(edge["observed"])
+            self.assertFalse(edge["replayable"])
+            # A navigation to a different URL is not a same-URL settling edge.
+            page.url = "https://example.test/other"
+            page.dom = "<html>navigated</html>"
+            recorder.snapshot("dom-change")
+            self.assertEqual(len(recorder.transitions), 1)
+
+    def test_existing_recording_temporal_candidates_are_only_diagnostic(self):
+        from navigation_analysis import graph_coverage
+        steps = [
+            {"url": "https://example.test/a", "reason": "initial"},
+            {"url": "https://example.test/b", "reason": "click"},
+            {"url": "https://example.test/b", "reason": "dom-change"},
+            {"url": "https://example.test/c", "reason": "click"},
+        ]
+        transitions = [
+            {"from": 0, "to": 1, "kind": "click", "observed": True},
+            {"from": 2, "to": 3, "kind": "click", "observed": True},
+        ]
+        graph = graph_coverage(steps, transitions)
+        self.assertEqual(graph["reachable_states"], [0, 1])
+        self.assertEqual(graph["potential_reachable_states"], [0, 1, 2, 3])
+        self.assertEqual(len(graph["temporal_dom_candidates"]), 1)
+        self.assertEqual((graph["temporal_dom_candidates"][0]["from"],
+                          graph["temporal_dom_candidates"][0]["to"]), (1, 2))
+        self.assertFalse(graph["temporal_dom_candidates"][0]["observed_action"])
+        self.assertFalse(graph["temporal_dom_candidates"][0]["replayable"])
+
     def test_capture_event_instrumentation_covers_non_buttons(self):
         source = (Path(__file__).resolve().parents[1] / "automatic_capture.py").read_text()
         replay = (Path(__file__).resolve().parents[1] / "capture_replay.py").read_text()
