@@ -101,7 +101,14 @@ def rewrite_css(value, base_url, asset_urls):
         original = match.group(2).strip()
         asset = asset_urls.get(urljoin(base_url, original))
         return "url('" + asset + "')" if asset else "url('')"
-    return re.sub(r"url\(\s*(['\"]?)([^)'\"\s]+)\1\s*\)", replace, value, flags=re.I)
+    result = re.sub(r"url\(\s*(['\"]?)([^)'\"\s]+)\1\s*\)", replace, value, flags=re.I)
+    # Rewrite quoted @import files as well as url(...) references.
+    result = re.sub(
+        r"@import\s+(['\"])([^'\"]+)\1",
+        lambda m: "@import url('" + asset_urls.get(urljoin(base_url, m.group(2)), "") + "')",
+        result, flags=re.I,
+    )
+    return result
 
 
 class SnapshotSanitizer(HTMLParser):
@@ -148,7 +155,15 @@ class SnapshotSanitizer(HTMLParser):
                 else:
                     value = self.asset_urls.get(urljoin(self.page_url, value), "")
             elif low == "srcset":
-                value = ""
+                candidates = []
+                for candidate in value.split(","):
+                    parts = candidate.strip().split()
+                    if not parts:
+                        continue
+                    asset = self.asset_urls.get(urljoin(self.page_url, parts[0]))
+                    if asset:
+                        candidates.append(" ".join([asset] + parts[1:]))
+                value = ", ".join(candidates)
             elif low == "style":
                 value = rewrite_css(value, self.page_url, self.asset_urls)
             elif tag == "input" and low == "value":
