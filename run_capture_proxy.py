@@ -16,6 +16,7 @@ from navigation_editor import (NavigationEditError, EDITOR, EDITOR_JS_PATH,
 from gym.fixture_receipt import parse_fixture_receipt, FixtureReceiptError
 from proxy_app import MockProxy, SITES
 from browser_mail import BrowserMailbox, MAIL_URL
+from mailbox_recordings import load_recording_directories
 
 ROOT = Path(__file__).resolve().parent
 CSP = (
@@ -264,39 +265,120 @@ class RecordedMockProxy(MockProxy):
         return self._respond(flow, status, body, mime)
 
 
-async def run(directory, preview_dom_settling=False, trusted_fixture_js=False,
-              agent_js_inspection=False, edit_navigation=False):
+class ConfiguredMailboxProxy(MockProxy):
+    """Serve all explicitly listed local snapshots as inert offline mail links.
+
+    Captured script and submit behavior are intentionally not executable in
+    this mode. Each recorded origin has its own CaptureReplay, while the inbox
+    continues to be handled by MockProxy using server-side link destinations.
+    """
+
+    INERT_CSP = (
+        "default-src 'none'; script-src 'none'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "font-src 'self' data:; connect-src 'none'; form-action 'none'; "
+        "frame-src 'none'; object-src 'none'; base-uri 'none'; "
+        "frame-ancestors 'none'"
+    )
+
+    def __init__(self, config_path):
+        super().__init__()
+        self.captures = {}
+        for folder in load_recording_directories(config_path):
+            capture = CaptureReplay(folder)
+            scheme = urlsplit(capture.start_url).scheme
+            if scheme != "https":
+                raise ValueError(f"Mailbox recording needs HTTPS startUrl: {folder}")
+            if capture.host in {*SITES, "mock.test", "inbox.cedarpostmail.net"}:
+                raise ValueError(f"Recording host conflicts with a built-in host: {capture.host}")
+            if capture.host in self.captures:
+                raise ValueError(f"Two recordings use the same host: {capture.host}")
+            self.captures[capture.host] = capture
+        if not self.captures:
+            raise ValueError("No local recording could be loaded from mailbox config")
+        self.mailbox = BrowserMailbox([
+            *SITES.values(),
+            *[
+                {"host": capture.host,
+                 "entry": urlsplit(capture.start_url).path or "/",
+                 "id": "recorded-page"}
+                for capture in self.captures.values()
+            ],
+        ])
+        for capture in self.captures.values():
+            print(f"Mailbox recording: {capture.host} from {capture.directory} "
+                  f"({len(capture.steps)} screens, read-only)", flush=True)
+
+    def handle(self, flow):
+        request = flow.request
+        capture = self.captures.get(request.host)
+        if capture is None:
+            return super().handle(flow)
+        path = urlsplit(request.path).path
+        # No third-party original JS, form posting, synthetic event posting, or
+        # upstream requests are available from configured recordings.
+        if (request.port not in {80, 443} or request.headers.get("Upgrade")
+                or request.headers.get("Origin") not in {
+                    None, "http://" + capture.host, "https://" + capture.host
+                }):
+            return self.reply(flow, 403, b"Offline mock request blocked", "text/plain")
+        if request.method not in {"GET", "HEAD"}:
+            return self.reply(flow, 405, b"Read-only recording", "text/plain")
+        query = urlsplit(request.path).query
+        status, body, mime = capture.respond(request.method, path, query)
+        self.reply(flow, status, body, mime)
+        # Disallow the replay's event shim too: this mode is snapshot browsing,
+        # not functional credential/OTP submission. No script runs in page.
+        flow.response.headers["Content-Security-Policy"] = self.INERT_CSP
+        flow.response.headers["X-Mock-Proxy"] = "offline-static-no-upstream"
+
+
+async def run(directory=None, preview_dom_settling=False, trusted_fixture_js=False,
+              agent_js_inspection=False, edit_navigation=False,
+              config_path=None):
     options = Options(listen_host="127.0.0.1", listen_port=8080,
                       confdir=str(ROOT / "mitm-ca"))
     master = DumpMaster(options)
     master.options.update(connection_strategy="lazy", upstream_cert=False,
                           stream_large_bodies=None, body_size_limit="1m")
-    addon = RecordedMockProxy(directory, preview_dom_settling=preview_dom_settling,
-                              trusted_fixture_js=trusted_fixture_js,
-                              agent_js_inspection=agent_js_inspection,
-                              edit_navigation=edit_navigation)
+    if config_path is not None:
+        if any((preview_dom_settling, trusted_fixture_js, agent_js_inspection,
+                edit_navigation)):
+            raise ValueError("Configured mailbox mode is read-only and cannot use replay flags")
+        addon = ConfiguredMailboxProxy(config_path)
+    else:
+        addon = RecordedMockProxy(directory, preview_dom_settling=preview_dom_settling,
+                                  trusted_fixture_js=trusted_fixture_js,
+                                  agent_js_inspection=agent_js_inspection,
+                                  edit_navigation=edit_navigation)
     master.addons.add(addon)
     print("Dedicated proxy browser only. All upstream connections are DENIED.", flush=True)
-    print("Open recorded URL:", addon.capture.start_url, flush=True)
-    parts = urlsplit(addon.capture.start_url)
-    print("Read-only JavaScript listing:",
-          parts.scheme + "://" + parts.netloc + SCRIPT_INDEX,
-          "(research inspection only; does not execute sources)", flush=True)
-    if agent_js_inspection:
-        print("RESEARCH SOURCE-VISIBLE MODE: Page includes a visible source index link.", flush=True)
-        print("Never use this condition as an unmodified page-fidelity baseline.", flush=True)
-    if edit_navigation:
-        print("Visual navigation editor:", parts.scheme + "://" + parts.netloc + EDITOR,
-              "(benign screens only; persisted local overrides)", flush=True)
+    if isinstance(addon, RecordedMockProxy):
+        print("Open recorded URL:", addon.capture.start_url, flush=True)
+        parts = urlsplit(addon.capture.start_url)
+        print("Read-only JavaScript listing:",
+              parts.scheme + "://" + parts.netloc + SCRIPT_INDEX,
+              "(research inspection only; does not execute sources)", flush=True)
+        if agent_js_inspection:
+            print("RESEARCH SOURCE-VISIBLE MODE: Page includes a visible source index link.", flush=True)
+            print("Never use this condition as an unmodified page-fidelity baseline.", flush=True)
+        if edit_navigation:
+            print("Visual navigation editor:", parts.scheme + "://" + parts.netloc + EDITOR,
+                  "(benign screens only; persisted local overrides)", flush=True)
+        print("Synthetic events: http://mock.test/__mock_capture/events", flush=True)
+    else:
+        print("Configured recordings are read-only. No page scripts or form submit.", flush=True)
     print("Browser inbox:", MAIL_URL, flush=True)
     print("Mailbox click metadata: http://mock.test/__mock/mail-events", flush=True)
-    print("Synthetic events: http://mock.test/__mock_capture/events", flush=True)
     await master.run()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--recording", required=True, help="Recording folder with bundle.json")
+    sources = parser.add_mutually_exclusive_group(required=True)
+    sources.add_argument("--recording", help="One recording folder with bundle.json")
+    sources.add_argument("--recordings-config",
+                         help="JSON listing local recordings to show together in the inbox")
     parser.add_argument("--preview-dom-settling", action="store_true",
                         help="Opt in to automatic local playback of unverified same-URL DOM-only snapshots")
     parser.add_argument("--trusted-fixture-js", action="store_true",
@@ -312,6 +394,7 @@ if __name__ == "__main__":
         asyncio.run(run(args.recording, preview_dom_settling=args.preview_dom_settling,
                         trusted_fixture_js=args.trusted_fixture_js,
                         agent_js_inspection=args.agent_js_inspection,
-                        edit_navigation=args.edit_navigation))
+                        edit_navigation=args.edit_navigation,
+                        config_path=args.recordings_config))
     except KeyboardInterrupt:
         pass
