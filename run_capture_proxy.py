@@ -113,6 +113,41 @@ class RecordedMockProxy(MockProxy):
             self._metadata_log("capture_origin_blocked", path, request.method)
             return self._respond(flow, 403, b"Blocked")
 
+        if self.edit_navigation and path in {
+            EDITOR, EDITOR_JS_PATH, EDITOR_STATE, EDITOR_SAVE
+        }:
+            if path == EDITOR_SAVE:
+                if (request.method != "POST" or
+                        request.headers.get("Origin") !=
+                        "https://" + self.capture.host):
+                    return self._respond(flow, 403, b"Editor write denied")
+                if request.headers.get("Content-Type", "").split(";", 1)[0].lower() != "application/json":
+                    return self._respond(flow, 415, b"JSON required")
+                try:
+                    self.capture.navigation_editor.write(request.raw_content or b"")
+                    # Rebuild the pages; do not alter bundle.json or HAR.
+                    self.capture = CaptureReplay(
+                        self.capture.directory, **self.replay_settings)
+                except (NavigationEditError, ValueError, OSError) as exc:
+                    self._metadata_log("editor_rejected", path, "POST")
+                    return self._respond(flow, 400, json.dumps({
+                        "error": str(exc)[:180]
+                    }).encode(), "application/json; charset=utf-8")
+                self._metadata_log("editor_saved", path, "POST")
+                return self._respond(flow, 200, b'{"saved":true}',
+                                     "application/json; charset=utf-8")
+            if request.method not in {"GET", "HEAD"}:
+                return self._respond(flow, 405, b"Editor is read-only for this method")
+            if path == EDITOR:
+                data, mime = EDITOR_HTML.encode(), "text/html; charset=utf-8"
+            elif path == EDITOR_JS_PATH:
+                data, mime = EDITOR_JS.encode(), "text/javascript; charset=utf-8"
+            else:
+                data = json.dumps(self.capture.navigation_editor.state(
+                    self.capture.initial_step)).encode()
+                mime = "application/json; charset=utf-8"
+            return self._respond(flow, 200, data if request.method == "GET" else b"", mime)
+
         if path == "/__mock_capture/fixture-receipt":
             # Only the packaged trusted demo may post fixed, non-sensitive
             # request metadata. Any captured external site stays read-only.
