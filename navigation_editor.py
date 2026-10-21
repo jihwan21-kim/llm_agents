@@ -106,12 +106,12 @@ iframe{width:100%;flex:1;border:0;background:white;min-height:0}
 <main>
 <section><h2>1. Choose a recorded screen</h2><div class="pad">
 <label for="from">Source screen</label><select id="from"></select>
-<div class="warn">Only benign screens are editable. Account, login, password, verification and payment screens are locked.</div>
+<div class="warn">All saved screens can be inspected in the preview. Authentication, account, verification and payment screens are read-only: no controls, submissions or manual navigation connections are enabled.</div>
 <div class="muted">The recording itself is never changed. Your manual mappings are saved in a separate JSON file.</div>
 <h2>Saved connections</h2><ul id="existing"></ul></div></section>
 <section><h2>2. Click the button in this preview</h2>
 <div id="frameMessage">Click a link, button, or visual DIV/SPAN control in the recorded snapshot to select it. This does not perform the action.</div>
-<iframe id="preview" title="Recorded snapshot preview"></iframe></section>
+<iframe id="preview" title="Recorded snapshot preview" sandbox="allow-same-origin"></iframe></section>
 <section><h2>3. Choose the destination</h2><div class="pad">
 <label for="selector">Selected control (CSS selector)</label><input id="selector" readonly placeholder="Click a button in the preview">
 <label for="to">Destination recorded screen</label><select id="to"></select>
@@ -138,13 +138,13 @@ EDITOR_JS = r"""(() => {
   function stepLabel(s) {
     return "#" + s.id + "  " + s.path + (s.blocked ? "  [locked]" : "");
   }
-  function fill(select, steps) {
+  function fill(select, steps, allowReadOnly = false) {
     select.replaceChildren();
     for (const s of steps) {
       const option = document.createElement("option");
       option.value = String(s.id);
       option.textContent = stepLabel(s);
-      option.disabled = s.blocked;
+      option.disabled = s.blocked && !allowReadOnly;
       select.append(option);
     }
   }
@@ -185,6 +185,11 @@ EDITOR_JS = r"""(() => {
     event.stopPropagation();
     const doc = preview.contentDocument;
     if (!doc) return;
+    const current = state?.steps.find(s => s.id === Number(sourceSelect.value));
+    if (!current || current.blocked) {
+      status.textContent = "Read-only snapshot. Editing is disabled for this screen.";
+      return;
+    }
     const raw = event.target;
     // Many recorded UI buttons are plain DIV/SPAN elements. Let the
     // researcher select them as well, rather than guessing an event target.
@@ -214,11 +219,20 @@ EDITOR_JS = r"""(() => {
     selectors.value = "";
     selectedElement = null;
     const src = state.steps.find(s => s.id === id);
-    if (!src || src.blocked) {
+    if (!src) {
       preview.removeAttribute("src");
-      status.textContent = "This screen is locked for navigation editing.";
+      status.textContent = "No saved screen selected.";
       return;
     }
+    const readOnly = src.blocked;
+    // For locked pages, display the already-sanitized recorded DOM without
+    // accepting any click, focus, edit or submission in this iframe.
+    preview.style.pointerEvents = readOnly ? "none" : "auto";
+    $("save").disabled = readOnly;
+    $("test").disabled = readOnly;
+    status.textContent = readOnly
+      ? "Read-only recorded screen. Authentication and payment navigation cannot be edited."
+      : "";
     preview.src = stepPath(id);
   }
   preview.addEventListener("load", () => {
@@ -234,16 +248,17 @@ EDITOR_JS = r"""(() => {
     if (!response.ok) throw Error("Editor state unavailable");
     const previous = preserveSource ? Number(sourceSelect.value) : -1;
     state = await response.json();
-    fill(sourceSelect, state.steps);
+    fill(sourceSelect, state.steps, true);
     fill(targetSelect, state.steps);
-    const first = state.steps.find(s => !s.blocked);
-    const chosen = state.steps.find(s => s.id === previous && !s.blocked) || first;
+    const first = state.steps.find(s => !s.blocked) || state.steps[0];
+    const chosen = state.steps.find(s => s.id === previous) || first;
     if (chosen) {
       sourceSelect.value = String(chosen.id);
-      targetSelect.value = String(state.steps.find(s => !s.blocked && s.id !== chosen.id)?.id ?? chosen.id);
+      const target = state.steps.find(s => !s.blocked && s.id !== chosen.id);
+      if (target) targetSelect.value = String(target.id);
       loadPreview(chosen.id);
     } else {
-      status.textContent = "No editable benign snapshots were recorded.";
+      status.textContent = "No recorded snapshots found.";
     }
     $("openMock").href = stepPath(state.initial_step);
     renderSaved();
@@ -291,6 +306,12 @@ EDITOR_JS = r"""(() => {
   $("save").addEventListener("click", () => {
     const from = Number(sourceSelect.value);
     const to = Number(targetSelect.value);
+    const current = state?.steps.find(s => s.id === from);
+    const destination = state?.steps.find(s => s.id === to);
+    if (!current || current.blocked || !destination || destination.blocked) {
+      status.textContent = "This recorded screen is read-only. No navigation mapping was changed.";
+      return;
+    }
     if (!selectedSelector || !Number.isInteger(from) || !Number.isInteger(to)) {
       status.textContent = "Select a button in the preview and a destination.";
       return;

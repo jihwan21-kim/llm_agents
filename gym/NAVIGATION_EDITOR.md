@@ -37,7 +37,11 @@ The editor lives on the **recorded site's local mock origin**, not
 ## Editing a button
 
 1. **Choose a recorded screen** on the left. Recorded steps are shown by
-   number and URL *path* only, with query strings omitted.
+   number and URL *path* only, with query strings omitted. All snapshots,
+   including **[locked]** authentication or payment screens, can be selected
+   for **read-only inspection**. A locked page loads in a sandboxed preview
+   with scripts disabled and pointer interaction disabled. Its saved HTML
+   and screenshots are not altered.
 2. In the center **page preview**, click an eligible button or link to
    select it. The editor intercepts this click; it does not activate the
    recorded action, submit a form or navigate. A selected control gains a
@@ -71,10 +75,14 @@ mock restarts; new recordings have independent edits.
   screens, run site JavaScript, reconstruct server sessions, submit forms,
   or reach unrecorded URLs.
 - Authentication, account, password, verification, wallet, checkout and
-  payment screens are locked from the editor, including screens identified
-  by sensitive form fields. Thus it does not repair third-party login
-  submission chains. Use your own reviewed synthetic `.test` login
-  fixture for credential-free agent behavior experiments.
+  payment screens remain **locked from navigation edits**, including screens
+  identified by sensitive form fields. They are now selectable in the left
+  pane solely to see their inert, read-only snapshot in the center; Save
+  connection is disabled and the server still rejects any attempt to use
+  them as a source or destination. The preview sandbox does not execute
+  original or simulation JavaScript. This does not repair third-party login
+  submission chains. Use a reviewed first-party synthetic fixture for
+  credential-free agent behavior experiments.
 - The preview is an explicit researcher control, with an obvious editor
   interface and visible research labeling. It must not be portrayed as
   the unaltered website.
@@ -93,3 +101,35 @@ mock restarts; new recordings have independent edits.
 
 All upstream requests remain denied by the proxy. A VM firewall is
 recommended to isolate other tools or browser extensions.
+
+## Why `transitions.json` might show an empty table
+
+There can be many saved screens but zero proven click-to-screen edges.
+This may happen when pages mutate on their own, when click events do
+not reach the recorded main-frame event observer, or when navigation
+occurs in a new tab. A list of snapshots by itself is **not** evidence
+that recorded click-to-screen navigation was captured.
+
+Use the correct recording folder and inspect the high-level counts
+without printing HTML, inputs or request bodies:
+
+```powershell
+$rec = Get-ChildItem '.\recordings\spnetflx' -Directory |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$bundle = Get-Content "$($rec.FullName)\bundle.json" -Raw | ConvertFrom-Json
+$edges = @(Get-Content "$($rec.FullName)\transitions.json" -Raw | ConvertFrom-Json)
+$actions = @(Get-Content "$($rec.FullName)\action-events.json" -Raw | ConvertFrom-Json)
+[pscustomobject]@{
+    Recording = $rec.FullName
+    Screens = @($bundle.steps).Count
+    TransitionRows = $edges.Count
+    ActionRows = $actions.Count
+}
+$actions | Select-Object action_id, kind, selector, outcome, observed_transition |
+    Format-Table -AutoSize
+```
+
+If TransitionRows is zero, there is no verified transition mapping to
+repair automatically. Review `action-events.json` to distinguish
+unobserved actions from browser behavior; don't treat a manual route as
+an originally observed navigation.
