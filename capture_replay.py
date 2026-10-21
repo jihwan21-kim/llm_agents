@@ -67,18 +67,30 @@ SIM_JS = r"""
   }
 
   document.addEventListener("click", event => {
-    const target = event.target instanceof Element
-      ? event.target.closest("button, a, input[type=submit], input[type=button], [role=button]")
-      : null;
+    const chain = event.composedPath?.() || [];
+    const target = chain.find(el => el instanceof Element)
+      || (event.target instanceof Element ? event.target : null);
     if (!target) return;
-    // No captured original links or scripts are allowed to navigate.
-    event.preventDefault();
+    // Capture every observed click target, including DIV/SPAN handlers.
+    // Captured scripts and original external navigation remain disabled.
     const edge = edges.find(e => e.kind === "click" && matches(target, e));
-    const submitEdge = target.closest("form")
-      ? edges.find(e => e.kind === "submit" && matches(target.closest("form"), e))
+    const form = target.closest("form");
+    const submitEdge = form
+      ? edges.find(e => e.kind === "submit" && matches(form, e))
       : null;
-    record(edge || submitEdge || null, "button_click",
-           target.closest("form") || document);
+    const candidate = edge || submitEdge || null;
+    const interactive = target.closest(
+      "button, a, input[type=submit], input[type=button], [role=button], [onclick], [tabindex]"
+    );
+    if (!candidate && !interactive) return;
+    if (interactive && (interactive.matches("a") || interactive.matches("button"))) {
+      event.preventDefault();
+    }
+    if (!candidate) {
+      console.debug("No recorded transition for clicked element. " +
+                    "Inspect bundle.json transitions or recapture this action.");
+    }
+    record(candidate, "button_click", form || document);
   }, true);
 
   document.addEventListener("submit", event => {
