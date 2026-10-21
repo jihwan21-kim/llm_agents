@@ -130,6 +130,29 @@ class ReplayTests(unittest.TestCase):
         self.assertIn('const chain = event.composedPath?.() || [];', replay)
         self.assertIn('const edge = edges.find(e => e.kind === "click"', replay)
 
+    def test_entry_skips_unaimed_loading_states(self):
+        with tempfile.TemporaryDirectory() as t:
+            self.make_recording(t)
+            folder = Path(t)
+            bundle = json.loads((folder / "bundle.json").read_text())
+            bundle["steps"].append({
+                "url": "https://example.test/a/b", "html": "step-002.html"
+            })
+            (folder / "step-002.html").write_text(
+                "<html><body><button id='login'>Login</button></body></html>"
+            )
+            bundle["transitions"] = [{
+                "from": 2, "to": 2, "kind": "change",
+                "selector": "#login", "outcome": "no-change",
+                "observed": True
+            }]
+            (folder / "bundle.json").write_text(json.dumps(bundle))
+            replay = CaptureReplay(folder)
+            self.assertEqual(replay.initial_step, 2)
+            self.assertIn("Login", replay.respond("GET", "/a/b")[1].decode())
+            self.assertEqual(replay.respond("GET", "/a/b", "__mock_step=0")[0], 200)
+            self.assertEqual(replay.respond("GET", "/a/b", "__mock_step=1")[0], 200)
+
     def test_recorded_branches_not_arbitrary_next_step(self):
         with tempfile.TemporaryDirectory() as t:
             self.make_recording(t)

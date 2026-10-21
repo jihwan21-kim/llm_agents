@@ -34,6 +34,8 @@ class RecordedMockProxy(MockProxy):
         print(f"Offline replay: {self.capture.host} with "
               f"{len(self.capture.steps)} snapshots and {len(self.capture.assets)} assets",
               flush=True)
+        print(f"Initial displayed state: {self.capture.initial_step}",
+              flush=True)
 
     def _respond(self, flow, status, body=b"", mime="text/plain"):
         flow.response = http.Response.make(status, body, {

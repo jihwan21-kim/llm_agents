@@ -228,6 +228,21 @@ class CaptureReplay:
         self.transitions = self.bundle.get("transitions", [])
         if not self.steps:
             raise ValueError("No recorded HTML snapshots")
+        # Loading scripts often generate many no-action snapshots before
+        # the first user click. Start at the first verified actionable state
+        # on the recorded entry path, rather than always at state zero.
+        entry_path = parsed.path or "/"
+        candidates = []
+        for edge in self.transitions:
+            state = edge.get("from")
+            if (type(state) is not int or state < 0 or state >= len(self.steps)
+                    or edge.get("kind") not in {"click", "submit", "change"}
+                    or not edge.get("observed")):
+                continue
+            source = urlsplit(self.steps[state].get("url") or self.start_url)
+            if source.hostname == self.host and (source.path or "/") == entry_path:
+                candidates.append(state)
+        self.initial_step = candidates[0] if candidates else 0
         har = json.loads((self.directory / "trace.har").read_text(encoding="utf-8"))
         self.assets, self.urls = {}, {}
         for entry in har.get("log", {}).get("entries", []):
@@ -314,13 +329,17 @@ class CaptureReplay:
         # The query selects an offline snapshot, never the real website.
         requested = parse_qs(query).get("__mock_step")
         if requested is None:
-            default_idx = next(
-                (i for i, st in enumerate(self.steps)
-                 if urlsplit(st.get("url") or self.start_url).hostname == self.host
-                 and (urlsplit(st.get("url") or self.start_url).path or "/") == path),
-                0
-            )
-            idx_raw = str(default_idx)
+            entry_path = urlsplit(self.start_url).path or "/"
+            if path == entry_path:
+                idx_raw = str(self.initial_step)
+            else:
+                default_idx = next(
+                    (i for i, st in enumerate(self.steps)
+                     if urlsplit(st.get("url") or self.start_url).hostname == self.host
+                     and (urlsplit(st.get("url") or self.start_url).path or "/") == path),
+                    0
+                )
+                idx_raw = str(default_idx)
         else:
             idx_raw = requested[0]
         if not idx_raw.isdecimal() or int(idx_raw) not in self.pages:
