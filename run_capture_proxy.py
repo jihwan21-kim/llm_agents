@@ -301,7 +301,7 @@ class ConfiguredMailboxProxy(MockProxy):
             *[
                 {"host": capture.host,
                  "entry": urlsplit(capture.start_url).path or "/",
-                 "id": "recorded-page"}
+                 "id": "recording-preview"}
                 for capture in self.captures.values()
             ],
         ])
