@@ -421,3 +421,37 @@ guard to force a result.
 Offline regression suite:
 
     .venv\Scripts\python.exe -m unittest discover -s tests -p "test_action_settling.py" -v
+
+## Real clicks vs JavaScript-generated clicks (capture fix)
+
+A previously captured cart interaction appeared as an interrupted click
+with a blocked POST, immediately followed by an unrelated successful click
+on a login control. These logs **do not prove** whether a human clicked the
+second control or the page's JavaScript dispatched a second event. It would
+misrepresent the experiment to manually remap the cart button to login.
+
+New authorized recordings now preserve `Event.isTrusted` as a boolean:
+- user-initiated clicks are recorded as distinct initiating actions
+- untrusted `HTMLElement.click()` events are captured as **derived events**,
+  not a second human click that interrupts the first
+- immediate native form-submit and change events following a click are
+  likewise audited as follow-up events
+- the resulting settled DOM transition is attributed to the initiating
+  user click, with any blocked request separately marked
+- genuine second human clicks still interrupt the prior pending action;
+  script-only changes without an initiating user click do not magically
+  create verified user navigation.
+
+Read `action-events.json` for user actions and `derived-events.json` for
+their possible follow-up events. The latter logs action kind, CSS selector,
+origin state, reason and parent action ID, **never field contents or request
+bodies**. Inspect `blocked-writes.json` for redacted write-block metadata.
+`observed: true` on a transition with `blocked_write: true` means a
+browser-visible UI change was observed, **not** that a blocked server
+transaction completed.
+
+This requires a new recording. Existing bundles are never changed. The
+recorded original host remains offline-only at replay; do not use real
+credentials or remove upstream blocking. For server-dependent flows,
+exercise the logic against a fully controlled fixture with synthetic
+responses rather than a live phishing-like origin.
