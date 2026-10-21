@@ -370,3 +370,54 @@ If buttons remain unresponsive while the preview is enabled, check
 `http://mock.test/__mock_capture/events`: missing click selectors and
 server-dependent actions are separate limitations not repaired by this
 feature.
+
+
+## Action-to-settled-state recorder (new recordings only)
+
+The original automatic recorder saved the first DOM update after a click
+(about 650 ms of quiet) and cleared the click before delayed UI rendering
+finished. This could strand later saved screens as `dom-change` with no
+associated user action. It also selected `[tabindex]` layout ancestors as
+clickable controls, sometimes recording generic selectors such as
+`body > main` instead of the specific DIV/button clicked.
+
+The new recorder does **not** automatically restore missing actions in old
+bundles. Record a **new authorized, isolated test flow** with the existing
+read-only command:
+
+    .\record-site-windows.bat --app demo --url "http://127.0.0.1:8000/" --name settled-flow
+
+The recording now:
+- emits a browser action ID and keeps an independent global recorder action
+  ID for each click, change and submit
+- uses the clicked element, not a focus-only `[tabindex]` ancestor, when
+  deriving the CSS selector (both target and chosen selectors are recorded,
+  never field values)
+- waits 1.75 seconds of DOM quiet before recording a changed result (up to
+  10 seconds on endlessly updating pages)
+- allows up to 3.5 seconds for a button with no DOM/URL change to complete
+  before classifying it as `no-change`
+- saves `interrupted` rather than inventing a transition when another
+  action happens before the previous one settles
+- records `blocked-write` rather than successful navigation for clicks
+  that attempted forbidden POST/PUT/PATCH/DELETE and did not change the UI
+- writes metadata-only `blocked-writes.json` and enriched
+  `action-events.json` for auditing
+
+Read `action-events.json` after recording and check the `outcome`,
+`selector`, `target_selector`, `from` and `to` fields. The new
+report also prints the number of actions in each outcome category. Never
+interpret a `blocked-write`, `interrupted`, or `unfinished` action
+as an observed navigation or proof that a purchase/login took place.
+
+**Limits:** This change improves action attribution for observed UI
+changes. It does not execute original JavaScript during offline replay,
+does not recreate backend-driven purchase/login states from blocked writes,
+and cannot infer where an action in an existing incomplete recording would
+have gone. Use synthetic server responses in your own controlled fixture
+when testing backend-dependent flows. Do not remove the read-only network
+guard to force a result.
+
+Offline regression suite:
+
+    .venv\Scripts\python.exe -m unittest discover -s tests -p "test_action_settling.py" -v
