@@ -155,7 +155,7 @@ def export_static_assets(har_path, output):
 class Recorder:
     def __init__(self, page, out, limit):
         self.page, self.out, self.limit = page, out, limit
-        self.steps, self.transitions = [], []
+        self.steps, self.transitions, self.action_events = [], [], []
         self.pending, self.last_change = None, 0
         self.seen_mutation = False
         self.mutation_started = None
@@ -179,6 +179,12 @@ class Recorder:
             self.seen_mutation = True
             self.last_change = now
         elif event.get("kind") in {"click", "submit", "change"}:
+            self.action_events.append({
+                "kind": event["kind"],
+                "selector": str(event.get("selector", ""))[:256],
+                "from": self.current_index,
+                "seq": len(self.action_events)
+            })
             if self.pending is None:
                 self.pending = {
                     "kind": event["kind"],
@@ -401,7 +407,15 @@ def main():
     }
     (out / "bundle.json").write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
     (out / "transitions.json").write_text(json.dumps(transitions, indent=2), encoding="utf-8")
+    (out / "action-events.json").write_text(
+        json.dumps(recorder.action_events, indent=2), encoding="utf-8"
+    )
+    clicks = sum(a["kind"] == "click" for a in recorder.action_events)
     print(f"Saved {len(steps)} states, {len(transitions)} action edges, {assets} assets and {count} HAR entries.")
+    print(f"Captured {clicks} clicks and {len(recorder.action_events)} total user actions.")
+    if len(steps) > 1 and not transitions:
+        print("WARNING: Multiple screens but no action edges. The replay cannot infer which button navigates.")
+        print("Check whether the workflow uses new tabs, cross-origin frames, or unsupported clicks.")
     print("Replay:", "start-har-mock-windows.bat", str(out))
 
 if __name__ == "__main__":
