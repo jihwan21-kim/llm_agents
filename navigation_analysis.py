@@ -98,6 +98,53 @@ def extract_js_route_literals(source, page_url, limit=100):
 
 
 
+def temporal_dom_candidates(steps, transitions):
+    """Conservative candidates from consecutive same-URL DOM-only snapshots.
+
+    Snapshot order proves a later DOM state was observed, but not that the
+    preceding click caused it. Do not make these replayable action edges.
+    """
+    known = {(e.get("from"), e.get("to")) for e in transitions
+             if e.get("observed") and type(e.get("from")) is int
+             and type(e.get("to")) is int}
+    result = []
+    for dest in range(1, len(steps)):
+        current, previous = steps[dest], steps[dest - 1]
+        if current.get("reason") != "dom-change" or (dest - 1, dest) in known:
+            continue
+        if not previous.get("url") or previous.get("url") != current.get("url"):
+            continue
+        result.append({
+            "from": dest - 1, "to": dest,
+            "source": "temporal_same_url_snapshot",
+            "kind": "dom_settle_candidate",
+            "observed_action": False,
+            "replayable": False,
+            "reason": "Consecutive same-URL snapshots; causal action unknown",
+        })
+    return result
+
+
+def reachable_with_candidates(steps, transitions, candidates, entry):
+    adjacent = {}
+    for edge in transitions:
+        a, b = edge.get("from"), edge.get("to")
+        if (type(a) is int and type(b) is int
+                and 0 <= a < len(steps) and 0 <= b < len(steps)
+                and edge.get("observed")):
+            adjacent.setdefault(a, set()).add(b)
+    for edge in candidates:
+        adjacent.setdefault(edge["from"], set()).add(edge["to"])
+    seen, pending = set(), [entry] if steps else []
+    while pending:
+        current = pending.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        pending.extend(adjacent.get(current, set()) - seen)
+    return sorted(seen)
+
+
 def graph_coverage(steps, transitions):
     """Audit observed links without inventing paths for orphaned states."""
     adjacency, edges, invalid = {}, [], 0
@@ -119,7 +166,12 @@ def graph_coverage(steps, transitions):
             continue
         reachable.add(node)
         pending.extend(adjacency.get(node, set()) - reachable)
+    candidates = temporal_dom_candidates(steps, transitions)
+    with_candidates = reachable_with_candidates(steps, transitions, candidates, entry)
     return {"entry_state_candidate": entry, "observed_edges": edges,
+            "temporal_dom_candidates": candidates,
+            "potential_reachable_states": with_candidates,
+            "potentially_unreachable_states": sorted(set(range(len(steps))) - set(with_candidates)),
             "invalid_edges": invalid,
             "no_change_edge_count": sum(e["from"] == e["to"] for e in edges),
             "reachable_states": sorted(reachable),
@@ -242,5 +294,10 @@ if __name__ == "__main__":
           f"analyzed bodies: {c['script_bodies_analyzed']}.")
     print(f"Observed graph: {len(g['observed_edges'])} edges; "
           f"{len(g['reachable_states'])}/{report['recorded_states']} states reachable.")
+    print(f"Potential DOM-settling links (unverified): {len(g['temporal_dom_candidates'])}; "
+          f"reachability including candidates: "
+          f"{len(g['potential_reachable_states'])}/{report['recorded_states']}.")
+    print("Candidates are time-adjacent DOM changes, NOT verified clicks; "
+          "they are never executed during replay.")
     print("Zero literal route hints does not mean navigation was not recorded.")
     print("Unverified targets are not proof of a recorded user action.")
