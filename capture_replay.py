@@ -173,7 +173,8 @@ SIM_JS = r"""
       // same-origin HTML href hints before authorizing local navigation.
       if (edge && result.to === edge.to &&
           (result.observed || result.static_navigation || result.manual_navigation) &&
-          (edge.outcome === "changed" || edge.outcome === "html-href") &&
+          (edge.outcome === "changed" || edge.outcome === "html-href" ||
+           edge.outcome === "manual_navigation") &&
           edge.to !== step && edge.to_path) {
         const url = new URL(edge.to_path, location.origin);
         url.searchParams.set("__mock_step", String(edge.to));
