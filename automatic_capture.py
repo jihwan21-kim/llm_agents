@@ -28,6 +28,20 @@ MARKER = "__MOCK_AUTO_EVENT__"
 SETTLE_QUIET_SECONDS = 1.75
 NO_CHANGE_WAIT_SECONDS = 3.5
 MAX_SETTLE_SECONDS = 10.0
+
+
+def capture_method_allowed(method, allow_live_post=False):
+    """Keep safe capture default, optionally pass POST for live page transitions.
+
+    This controls the browser's outgoing traffic, not offline mock execution.
+    PUT/PATCH/DELETE remain blocked even when POST has been opted into.
+    """
+    action = method.upper()
+    return action in {"GET", "HEAD", "OPTIONS"} or (
+        allow_live_post and action == "POST"
+    )
+
+
 EVENT_SCRIPT = r"""
 (() => {
   if (window.__mockAutoCapture) return;
@@ -485,6 +499,12 @@ def main():
     parser.add_argument("--name", default="workflow")
     parser.add_argument("--browser-channel", choices=["chrome", "chromium"], default="chrome")
     parser.add_argument("--max-steps", type=int, default=120)
+    parser.add_argument(
+        "--allow-live-post", action="store_true",
+        help="Opt in to sending POST requests to the REAL site during recording. "
+             "Do not use with account credentials, personal data, or untrusted sites. "
+             "The default blocks all live write requests."
+    )
     args = parser.parse_args()
     parts = urlsplit(args.url)
     if parts.scheme not in {"http", "https"} or not parts.hostname:
@@ -500,7 +520,13 @@ def main():
     print("Recording:", out)
     print("Navigate in Chrome; each changed screen is saved automatically.")
     print("In THIS PowerShell window: Enter = check, s + Enter = snapshot, q + Enter = stop.")
-    print("Live non-read requests are BLOCKED; server-dependent transitions may not appear.")
+    if args.allow_live_post:
+        print("LIVE POST MODE: POST requests WILL reach the actual website.")
+        print("Use only public, authorized, non-sensitive interactions; do not sign in.")
+        print("PUT/PATCH/DELETE remain blocked. Browser background POSTs may also be sent.")
+    else:
+        print("Live POST/PUT/PATCH/DELETE are BLOCKED (default safe capture mode).")
+        print("To record public POST-driven page transitions, pass --allow-live-post.")
     print("Use only synthetic values. Do not use real account, payment or personal data.")
     commands = queue.Queue()
     threading.Thread(target=command_reader, args=(commands,), daemon=True).start()
@@ -516,18 +542,19 @@ def main():
         )
         context.add_init_script(EVENT_SCRIPT)
 
-        # Never send write requests from the capture browser to the live site.
-        # Server-driven POST transitions must be modeled later as synthetic
-        # local mock states, not observed live login successes.
-        def capture_read_only(route):
-            if route.request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
-                print("Blocked live write:", route.request.method)
-                recorder.on_blocked_write(route.request.method)
+        # In opt-in mode public POST-based navigation works as on the live
+        # site; default mode continues to block every live write. This mode
+        # does not unlock execution of third-party scripts in offline replay.
+        def capture_network_policy(route):
+            method = route.request.method.upper()
+            if not capture_method_allowed(method, args.allow_live_post):
+                print("Blocked live write:", method)
+                recorder.on_blocked_write(method)
                 route.abort()
             else:
                 route.continue_()
 
-        context.route("**/*", capture_read_only)
+        context.route("**/*", capture_network_policy)
         page = context.new_page()
         recorder = Recorder(page, out, args.max_steps)
         try:
@@ -584,6 +611,7 @@ def main():
     bundle = {
         "version": 2, "app": args.app, "id": run_id, "name": args.name,
         "startUrl": args.url, "steps": steps, "transitions": transitions,
+        "livePostAllowed": args.allow_live_post,
         "harFile": "trace.har", "harGetEntries": count, "exportedAssets": assets,
     }
     (out / "bundle.json").write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
