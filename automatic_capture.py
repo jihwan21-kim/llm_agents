@@ -261,6 +261,8 @@ class Recorder:
             return False
         # Revisiting a byte-identical recorded DOM is a graph edge, not a
         # new screen. This allows branches from the same starting state.
+        previous_idx = self.current_index
+        previous_url = self.steps[previous_idx]["url"] if previous_idx >= 0 else None
         revisited = signature in self.state_index
         if revisited:
             idx = self.state_index[signature]
@@ -285,6 +287,17 @@ class Recorder:
         if self.pending and self.pending["from"] >= 0:
             edge = {k: self.pending[k] for k in ["kind", "selector", "tag", "from"]}
             edge.update({"to": idx, "outcome": "changed", "observed": True})
+            if edge not in self.transitions:
+                self.transitions.append(edge)
+        elif (reason == "dom-change" and previous_idx >= 0 and idx != previous_idx
+              and previous_url == url):
+            # DOM-only settling is observed chronology, not observed action
+            # causality. Preserve for graph auditing but don't replay it as a
+            # button edge or count it as a verified click.
+            edge = {"kind": "dom_settle", "selector": "", "tag": "",
+                    "from": previous_idx, "to": idx,
+                    "outcome": "changed", "observed": False,
+                    "temporal_observation": True, "replayable": False}
             if edge not in self.transitions:
                 self.transitions.append(edge)
         self.current_index = idx
