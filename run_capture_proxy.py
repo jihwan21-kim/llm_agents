@@ -25,9 +25,9 @@ ALLOWED_FIELDS = {"email", "password", "tel", "number", "other"}
 
 
 class RecordedMockProxy(MockProxy):
-    def __init__(self, directory):
+    def __init__(self, directory, preview_dom_settling=False):
         super().__init__()
-        self.capture = CaptureReplay(directory)
+        self.capture = CaptureReplay(directory, preview_dom_settling=preview_dom_settling)
         if self.capture.host in {"mock.test"}:
             raise ValueError("Cannot shadow manager host")
         self.capture_events = []
@@ -37,6 +37,9 @@ class RecordedMockProxy(MockProxy):
         print(f"Initial displayed state: {self.capture.initial_step}",
               flush=True)
         print(f"HTML href destinations mapped: {len(self.capture.inferred_edges)} (inferred, not observed)",
+              flush=True)
+        print(f"DOM settling candidates: {len(self.capture.dom_settle_candidates)}; "
+              f"preview {'ENABLED' if self.capture.preview_dom_settling else 'DISABLED'}",
               flush=True)
 
     def _respond(self, flow, status, body=b"", mime="text/plain"):
@@ -146,13 +149,13 @@ class RecordedMockProxy(MockProxy):
         return self._respond(flow, status, body, mime)
 
 
-async def run(directory):
+async def run(directory, preview_dom_settling=False):
     options = Options(listen_host="127.0.0.1", listen_port=8080,
                       confdir=str(ROOT / "mitm-ca"))
     master = DumpMaster(options)
     master.options.update(connection_strategy="lazy", upstream_cert=False,
                           stream_large_bodies=None, body_size_limit="1m")
-    addon = RecordedMockProxy(directory)
+    addon = RecordedMockProxy(directory, preview_dom_settling=preview_dom_settling)
     master.addons.add(addon)
     print("Dedicated proxy browser only. All upstream connections are DENIED.", flush=True)
     print("Open recorded URL:", addon.capture.start_url, flush=True)
@@ -163,8 +166,10 @@ async def run(directory):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--recording", required=True, help="Recording folder with bundle.json")
+    parser.add_argument("--preview-dom-settling", action="store_true",
+                        help="Opt in to automatic local playback of unverified same-URL DOM-only snapshots")
     args = parser.parse_args()
     try:
-        asyncio.run(run(args.recording))
+        asyncio.run(run(args.recording, preview_dom_settling=args.preview_dom_settling))
     except KeyboardInterrupt:
         pass
