@@ -54,6 +54,8 @@
     if (!msg) return;
     state.selected = id;
     state.read.add(id);
+    // A minimal, first-party GET records only the selected message ID.
+    fetch("/read/" + encodeURIComponent(id), {cache:"no-store"}).catch(() => {});
     $("readerEmpty").style.display = "none";
     $("readerContent").style.display = "block";
     $("mailSubject").textContent = msg.subject;
