@@ -26,10 +26,39 @@ SIM_JS = r"""
   catch (err) { console.error("Invalid recorded transition data", err); }
   let busy = false;
 
-  function matches(el, edge) {
-    if (!edge.selector || !el) return false;
-    try { return !!el.closest(edge.selector); }
-    catch (_) { return false; }
+  // A recorded no-op on a broad ancestor (e.g. "body > main")
+  // must not shadow a narrower successful click transition underneath it.
+  // Always prefer the selector whose matched element is closest to the
+  // actual click target, then the more specific selector, then a transition.
+  function matchingAncestor(el, edge) {
+    if (!edge.selector || !el) return null;
+    try { return el.closest(edge.selector); }
+    catch (_) { return null; }
+  }
+
+  function distanceToAncestor(el, ancestor) {
+    let distance = 0;
+    for (let current = el; current; current = current.parentElement) {
+      if (current === ancestor) return distance;
+      distance++;
+    }
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  function bestEdge(el, kind) {
+    const candidates = edges.filter(e => e.kind === kind).map(edge => ({
+      edge, ancestor: matchingAncestor(el, edge)
+    })).filter(item => item.ancestor);
+    candidates.sort((a, b) => {
+      const distance = distanceToAncestor(el, a.ancestor)
+                     - distanceToAncestor(el, b.ancestor);
+      if (distance) return distance;
+      const specificity = b.edge.selector.length - a.edge.selector.length;
+      if (specificity) return specificity;
+      return Number(b.edge.outcome === "changed")
+           - Number(a.edge.outcome === "changed");
+    });
+    return candidates[0]?.edge || null;
   }
 
   function filledFieldTypes(scope) {
@@ -73,10 +102,10 @@ SIM_JS = r"""
     if (!target) return;
     // Capture every observed click target, including DIV/SPAN handlers.
     // Captured scripts and original external navigation remain disabled.
-    const edge = edges.find(e => e.kind === "click" && matches(target, e));
+    const edge = bestEdge(target, "click");
     const form = target.closest("form");
     const submitEdge = form
-      ? edges.find(e => e.kind === "submit" && matches(form, e))
+      ? bestEdge(form, "submit")
       : null;
     const candidate = edge || submitEdge || null;
     const interactive = target.closest(
@@ -95,14 +124,14 @@ SIM_JS = r"""
 
   document.addEventListener("submit", event => {
     event.preventDefault();
-    const edge = edges.find(e => e.kind === "submit" && matches(event.target, e));
+    const edge = bestEdge(event.target, "submit");
     record(edge || null, "form_submit", event.target);
   }, true);
 
   document.addEventListener("change", event => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    const edge = edges.find(e => e.kind === "change" && matches(target, e));
+    const edge = bestEdge(target, "change");
     if (edge) record(edge, "field_change", target.closest("form") || document);
   }, true);
 })();
