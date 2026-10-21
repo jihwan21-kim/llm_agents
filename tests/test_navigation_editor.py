@@ -168,6 +168,17 @@ class NavigationEditorTests(unittest.TestCase):
         self.assertIn('loadPreview(to, true)', EDITOR_JS)
         self.assertNotIn('window.open(stepPath(to)', EDITOR_JS)
 
+        # A form button may be clicked for selector inspection, but never
+        # submitted or converted into a replay navigation edge.
+        self.assertIn('const inForm = !!target.closest("form")', EDITOR_JS)
+        self.assertIn('selectedIsFormControl = inForm', EDITOR_JS)
+        self.assertIn('!selectedIsFormControl;', EDITOR_JS)
+        self.assertIn('selectedIsFormControl || previewOnly', EDITOR_JS)
+        self.assertIn('event.preventDefault()', EDITOR_JS)
+        self.assertIn('Selected form button (inspection only', EDITOR_JS)
+        self.assertIn('sandbox="allow-same-origin"', EDITOR_HTML)
+        self.assertNotIn('sandbox="allow-scripts"', EDITOR_HTML)
+
         self.assertIn("stopImmediatePropagation", EDITOR_JS)
         node = shutil.which("node")
         if node:
