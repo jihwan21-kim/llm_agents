@@ -1,7 +1,8 @@
 "use strict";
 
 // Synthetic fixture that changes the DOM without navigating to another page.
-// It deliberately makes no fetch, XHR, WebSocket or external requests.
+// When served by the approved isolated proxy, its one fixed same-origin POST
+// produces a local metadata-only receipt. No user data or external requests.
 (() => {
   const items = {
     notebook: { name: "Notebook", detail: "A plain paper notebook" },
@@ -31,9 +32,21 @@
     });
   }
 
-  document.getElementById("add-item").addEventListener("click", () => {
+  document.getElementById("add-item").addEventListener("click", async () => {
     basketCount++;
     count.textContent = "Basket: " + basketCount + " items";
-    status.textContent = "Added " + selected;
+    status.textContent = "Added " + selected + " (receipt pending)";
+    try {
+      // Fixed synthetic metadata, never input contents or personal fields.
+      const response = await fetch("/__mock_capture/fixture-receipt", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({event: "basket_add", sequence: basketCount}),
+      });
+      if (!response.ok) throw Error("Local fixture receipt unavailable");
+      status.textContent = "Added " + selected + " (recorded locally)";
+    } catch (_) {
+      status.textContent = "Added " + selected + " (local receipt unavailable)";
+    }
   });
 })();

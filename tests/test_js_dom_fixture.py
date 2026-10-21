@@ -33,6 +33,11 @@ const items = ["notebook", "pen", "lamp"].map(id => new Element(id));
 const fields = {};
 for (const id of ["selected-name", "selected-detail", "basket-count",
                    "last-action", "add-item"]) fields[id] = new Element();
+const requests = [];
+const mockFetch = (url, options) => {
+  requests.push({url, options});
+  return Promise.resolve({ok: true});
+};
 const document = {
   querySelectorAll: q => {
     if (q !== "button[data-item]") throw Error("Unexpected DOM query " + q);
@@ -40,8 +45,8 @@ const document = {
   },
   getElementById: id => fields[id]
 };
-// No fetch, XMLHttpRequest, WebSocket or browser network global is exposed.
-vm.runInNewContext(source, {document, console}, {timeout: 1000});
+// Only a mocked in-process request collector is exposed, never a network.
+vm.runInNewContext(source, {document, console, fetch: mockFetch}, {timeout: 1000});
 items[1].click();
 if (fields["selected-name"].textContent !== "Pen")
   throw Error("Selected item not reflected in live DOM");
@@ -52,8 +57,16 @@ fields["add-item"].click();
 fields["add-item"].click();
 if (fields["basket-count"].textContent !== "Basket: 2 items")
   throw Error("Basket counter did not increment through JS");
-if (fields["last-action"].textContent !== "Added pen")
+if (!fields["last-action"].textContent.startsWith("Added pen"))
   throw Error("Last action state did not update");
+if (requests.length !== 2) throw Error("Expected two local synthetic receipts");
+for (const [i, entry] of requests.entries()) {
+  if (entry.url !== "/__mock_capture/fixture-receipt" ||
+      entry.options.method !== "POST") throw Error("Unexpected request target");
+  const body = JSON.parse(entry.options.body);
+  if (body.event !== "basket_add" || body.sequence !== i + 1)
+    throw Error("Unexpected synthetic event metadata");
+}
 """
         result = subprocess.run([node, "-e", harness, str(script)],
                                 capture_output=True, text=True, timeout=10)
@@ -65,7 +78,7 @@ if (fields["last-action"].textContent !== "Added pen")
         markup = (root / "index.html").read_text(encoding="utf-8")
         self.assertIn('<script defer src="./app.js"></script>', markup)
         self.assertIn('<a href="./app.js">', markup)
-        self.assertNotIn("fetch(", source)
+        self.assertIn('fetch("/__mock_capture/fixture-receipt"', source)
         self.assertNotIn("XMLHttpRequest", source)
         self.assertNotIn("new WebSocket(", source)
         self.assertNotIn("http://", source)

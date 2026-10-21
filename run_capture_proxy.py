@@ -11,6 +11,7 @@ from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from capture_replay import CaptureReplay, SCRIPT_INDEX
+from gym.fixture_receipt import parse_fixture_receipt, FixtureReceiptError
 from proxy_app import MockProxy
 
 ROOT = Path(__file__).resolve().parent
@@ -96,6 +97,41 @@ class RecordedMockProxy(MockProxy):
         }:
             self._metadata_log("capture_origin_blocked", path, request.method)
             return self._respond(flow, 403, b"Blocked")
+
+        if path == "/__mock_capture/fixture-receipt":
+            # Only the packaged trusted demo may post fixed, non-sensitive
+            # request metadata. Any captured external site stays read-only.
+            if not self.capture.trusted_fixture_js:
+                self._metadata_log("fixture_receipt_denied", path, request.method)
+                return self._respond(flow, 403, b"Fixture event disabled")
+            if request.method != "POST":
+                return self._respond(flow, 405, b"Method not allowed")
+            if request.headers.get("Content-Type", "").split(";", 1)[0].lower() != "application/json":
+                return self._respond(flow, 415, b"JSON required")
+            try:
+                event = parse_fixture_receipt(request.raw_content or b"")
+            except FixtureReceiptError:
+                self._metadata_log("fixture_receipt_rejected", path, "POST")
+                return self._respond(flow, 400, b"Invalid synthetic fixture event")
+            # No raw body, headers, arbitrary fields, cookies, credentials,
+            # or outbound transmission are retained.
+            receipt = {
+                "time": datetime.now(timezone.utc).isoformat(),
+                "kind": "fixture_local_receipt",
+                "event": event["event"],
+                "sequence": event["sequence"],
+                "local_receipt": True,
+                "upstream_sent": False,
+                "simulated": True,
+            }
+            self.capture_events.append(receipt)
+            self.capture_events = self.capture_events[-1000:]
+            self._metadata_log("fixture_receipt_recorded", path, "POST")
+            return self._respond(flow, 200, json.dumps({
+                "recorded": True,
+                "local_receipt": True,
+                "upstream_sent": False
+            }).encode(), "application/json; charset=utf-8")
 
         if path == "/__mock_capture/event":
             if request.method != "POST" or len(request.raw_content or b"") > 1024:

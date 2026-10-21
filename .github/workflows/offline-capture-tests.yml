@@ -15,6 +15,8 @@ on:
       - tests/test_action_settling.py
       - tests/test_recorded_js_sources.py
       - tests/test_js_dom_fixture.py
+      - tests/test_fixture_receipt.py
+      - gym/fixture_receipt.py
       - gym/fixtures/js-demo/**
       - automatic_capture.py
       - navigation_analysis.py
