@@ -38,7 +38,11 @@ EVENT_SCRIPT = r"""
   // Many JS-driven sites use clickable DIV/SPAN elements instead of BUTTON.
   // Capture all non-input clicks, preferring a stable interactive ancestor,
   // so we can replay the observed choice rather than any arbitrary button.
-  const interactive = "button, a, label, summary, select, input[type=submit], input[type=button], [role=button], [onclick], [tabindex], [data-testid]";
+  // [tabindex] on layout containers (e.g. main) is often for focus, NOT
+  // click handling. Treating it as clickable swallowed actual child DIVs
+  // and produced the overly broad "body > main" selector.
+  const interactive = "button, a, label, summary, select, input[type=submit], input[type=button], [role=button], [onclick], [data-testid]";
+
   const elementFor = event => {
     const path = event.composedPath?.() || [];
     return path.find(item => item instanceof Element)
@@ -70,7 +74,8 @@ EVENT_SCRIPT = r"""
     const el = elementFor(e);
     if (!el || el.closest("input[type=password], textarea, [contenteditable]")) return;
     const picked = el.closest(interactive) || el;
-    emitAction({kind:"click", selector:selector(picked), tag:picked.tagName.toLowerCase()});
+    emitAction({kind:"click", selector:selector(picked),
+      target_selector:selector(el), tag:picked.tagName.toLowerCase()});
   }, true);
   document.addEventListener("submit", e => {
     emitAction({kind:"submit", selector:selector(e.target), tag:"form"});
@@ -254,6 +259,7 @@ class Recorder:
                 "action_id": action_id, "kind": event["kind"],
                 "selector": selector, "from": self.current_index,
                 "seq": seq, "browser_action_id": incoming if type(incoming) is int else None,
+                "target_selector": str(event.get("target_selector", ""))[:256],
                 "outcome": "pending"
             })
             self.pending = {
