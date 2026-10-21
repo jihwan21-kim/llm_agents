@@ -289,6 +289,7 @@ def main():
     print("Recording:", out)
     print("Navigate in Chrome; each changed screen is saved automatically.")
     print("In THIS PowerShell window: Enter = check, s + Enter = snapshot, q + Enter = stop.")
+    print("Live non-read requests are BLOCKED; server-dependent transitions may not appear.")
     print("Use only synthetic values. Do not use real account, payment or personal data.")
     commands = queue.Queue()
     threading.Thread(target=command_reader, args=(commands,), daemon=True).start()
@@ -303,6 +304,18 @@ def main():
             service_workers="block",
         )
         context.add_init_script(EVENT_SCRIPT)
+
+        # Never send write requests from the capture browser to the live site.
+        # Server-driven POST transitions must be modeled later as synthetic
+        # local mock states, not observed live login successes.
+        def capture_read_only(route):
+            if route.request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+                print("Blocked live write:", route.request.method)
+                route.abort()
+            else:
+                route.continue_()
+
+        context.route("**/*", capture_read_only)
         page = context.new_page()
         recorder = Recorder(page, out, args.max_steps)
         try:
