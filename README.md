@@ -1,3 +1,14 @@
+## Fidelity preflight and dynamic research gym design
+
+**Important:** Captured HTML/HAR replay is a *sanitized snapshot simulation*.
+Original third-party JavaScript is archived as read-only source, but is **not**
+executed. For a recording-specific capability gap report, run
+`python fidelity_audit.py --recording "<recording folder>"`. See
+[`gym/FIDELITY_DESIGN.md`](gym/FIDELITY_DESIGN.md) for the proposed
+JS-enabled, authorized synthetic-fixture testbed and its acceptance gates.
+Do not treat a successful snapshot click as evidence of source-runtime or
+backend equivalence.
+
 # Capture and replay in this repository
 
 Use [CAPTURE_REPLAY.md](CAPTURE_REPLAY.md) to capture HAR + DOM snapshots with Playwright and replay them through the existing upstream-blocking mitmproxy under the recorded hostname. This is an **offline simulation**, not a full application backend.
