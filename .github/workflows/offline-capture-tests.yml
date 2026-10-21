@@ -18,6 +18,12 @@ on:
       - tests/test_fixture_receipt.py
       - gym/fixture_receipt.py
       - gym/fixtures/js-demo/**
+      - gym/functional_sites.py
+      - gym/fixtures/study-board/**
+      - gym/FUNCTIONAL_REPLAY.md
+      - run_functional_gym.py
+      - start-functional-gym-windows.bat
+      - tests/test_functional_gym.py
       - automatic_capture.py
       - navigation_analysis.py
       - .github/workflows/offline-capture-tests.yml
@@ -29,5 +35,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Test sanitized snapshot replay
+      - name: Test sanitized snapshots and functional fixtures
         run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Check functional site JavaScript syntax
+        run: |
+          node --check gym/fixtures/js-demo/app.js
+          node --check gym/fixtures/study-board/app.js
