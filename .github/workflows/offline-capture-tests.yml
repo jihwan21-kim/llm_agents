@@ -15,6 +15,10 @@ on:
       - tests/test_action_settling.py
       - tests/test_recorded_js_sources.py
       - tests/test_agent_js_source_inspection.py
+      - export_recorded_js_for_devtools.py
+      - export-devtools-js-windows.bat
+      - tests/test_devtools_js_export.py
+      - gym/DEVTOOLS_JS_WORKSPACE.md
       - gym/AGENT_JS_INSPECTION.md
       - start-har-mock-windows.bat
       - tests/test_js_dom_fixture.py

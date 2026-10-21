@@ -1,3 +1,12 @@
+## View original recorded JavaScript in Chrome F12 Sources
+
+Export captured HAR scripts for Chrome's **Sources > Workspace** panel
+(without activating them in the mock): run
+`.\\export-devtools-js-windows.bat "<recording-folder>"`, then add the
+generated `_devtools_js` folder through DevTools Workspaces. This does **not**
+replace the mock's executing `sim.js` in Sources > Page.
+[Instructions](gym/DEVTOOLS_JS_WORKSPACE.md).
+
 ## Let an agent read captured site JavaScript (without executing it)
 
 Start your existing HAR mock with `--agent-js-inspection` to show an
