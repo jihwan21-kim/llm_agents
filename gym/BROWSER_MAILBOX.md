@@ -15,6 +15,55 @@ trusted CA is required to avoid browser certificate warnings on HTTPS.
 If certificate trust is not configured, do not disable certificate checks
 to hide errors: install/check the dedicated MITM root CA.
 
+## HTTPS "Not secure" / "주의 요함" in Chrome
+
+The launch URL must start with **https://**, not http://. Start the
+mock proxy in a PowerShell window *before* checking HTTPS:
+
+```powershell
+.\start-proxy-windows.bat
+```
+
+In a second PowerShell run:
+
+```powershell
+.\check-mock-https-windows.bat
+```
+
+This compares the **specific CA actually used by this repository** at
+`mitm-ca/mitmproxy-ca-cert.cer` with the Windows trusted-root store and
+verifies a TLS handshake for `inbox.cedarpostmail.net` over 127.0.0.1:8080.
+The default mitmproxy CA in `%USERPROFILE%\.mitmproxy` is usually **not
+the same certificate**, so installing the wrong one does not fix this
+project's Chrome profile.
+
+If the check prints `Project CA in Windows trusted root store: NO`,
+run the separately confirmed helper:
+
+```powershell
+.\trust-project-ca-windows.bat
+```
+
+Review the CA path, subject and fingerprint, then type **TRUST** only if
+this is your isolated experiment VM or Windows user. It imports only the
+public root certificate for `CurrentUser\Root` and never installs the
+private key. A trusted mitmproxy CA is powerful enough to sign certificates
+for other hostnames, so **remove the project CA when finished**.
+
+Restart **all** Chrome windows belonging to the dedicated experiment
+profile, then start the proxy and Chrome again:
+
+```powershell
+.\open-chrome-windows.bat
+```
+
+If the check succeeds but Chrome still says `주의 요함`, open Chrome F12
+→ **Security**, inspect the displayed problem, and check the precise
+address and certificate issuer for that tab. A browser warning might instead
+indicate HTTP navigation or an unsafe subresource, not a missing CA.
+Do not disable certificate verification or click through a Chrome
+certificate warning to mask an experiment failure.
+
 ## Normal Windows flow
 
 ```powershell
