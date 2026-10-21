@@ -100,6 +100,71 @@ class ActionSettlingTests(unittest.TestCase):
             self.assertEqual(r.action_events[0]["to"], 1)
             self.assertEqual(len(r.completed_actions), 1)
 
+    def test_programmatic_second_click_keeps_first_user_action(self):
+        # A real checkout click can cause app JS to call .click() on a
+        # login control, which used to overwrite the initiating action.
+        clock, page = Clock(), MockPage()
+        with tempfile.TemporaryDirectory() as tmp:
+            r = recorder_class(clock)(page, Path(tmp), 12)
+            page.url = "https://example.test/cart"
+            page.dom = "<html><body><div id='checkout'>Continue shopping</div></body></html>"
+            r.snapshot("initial")
+            send(r, "click", selector="#checkout", tag="div",
+                 action_id=1, trusted=True)
+            r.on_blocked_write("POST")
+            clock.forward(0.05)
+            send(r, "click", selector="#loginEntrar", tag="button",
+                 action_id=2, trusted=False)
+            self.assertEqual(len(r.action_events), 1)
+            self.assertEqual(len(r.derived_events), 1)
+            self.assertEqual(r.derived_events[0]["parent_action_id"], 1)
+            self.assertIsNotNone(r.pending)
+            self.assertEqual(r.pending["selector"], "#checkout")
+            page.url = "https://example.test/login"
+            page.dom = "<html><body>Test login page, fake values only</body></html>"
+            send(r, "mutation")
+            clock.forward(2)
+            r.poll()
+            self.assertEqual(len(r.steps), 2)
+            self.assertEqual(len(r.transitions), 1)
+            edge = r.transitions[0]
+            self.assertEqual((edge["from"], edge["to"]), (0, 1))
+            self.assertEqual(edge["selector"], "#checkout")
+            self.assertEqual(edge["outcome"], "changed")
+            self.assertTrue(edge["observed"])
+            self.assertTrue(edge["blocked_write"])
+            self.assertEqual(r.action_events[0]["outcome"], "changed")
+
+    def test_default_submit_does_not_interrupt_button_click(self):
+        clock, page = Clock(), MockPage()
+        with tempfile.TemporaryDirectory() as tmp:
+            r = recorder_class(clock)(page, Path(tmp), 10)
+            r.snapshot("initial")
+            send(r, "click", selector="#next", tag="button",
+                 action_id=1, trusted=True)
+            clock.forward(0.1)
+            send(r, "submit", selector="#form", tag="form",
+                 action_id=2, trusted=True)
+            self.assertEqual(len(r.action_events), 1)
+            self.assertEqual(r.derived_events[0]["reason"], "immediate_followup_event")
+            page.dom = "<html><body>Next step</body></html>"
+            send(r, "mutation")
+            clock.forward(2)
+            r.poll()
+            self.assertEqual(r.transitions[0]["selector"], "#next")
+            self.assertTrue(r.transitions[0]["observed"])
+
+    def test_untrusted_click_without_parent_cannot_prove_user_action(self):
+        clock, page = Clock(), MockPage()
+        with tempfile.TemporaryDirectory() as tmp:
+            r = recorder_class(clock)(page, Path(tmp), 10)
+            r.snapshot("initial")
+            send(r, "click", selector="#script", tag="button",
+                 action_id=1, trusted=False)
+            self.assertEqual(r.action_events, [])
+            self.assertIsNone(r.pending)
+            self.assertIsNone(r.derived_events[0]["parent_action_id"])
+
     def test_no_change_waits_and_is_not_invented_navigation(self):
         clock, page = Clock(), MockPage()
         with tempfile.TemporaryDirectory() as tmp:
@@ -183,6 +248,7 @@ class ActionSettlingTests(unittest.TestCase):
         self.assertIn("[role=button]", interactive)
         self.assertIn("target_selector:selector(el)", source)
         self.assertIn("action_id: ++nextActionId", source)
+        self.assertIn("trusted:e.isTrusted === true", source)
 
     def test_finish_keeps_unresolved_action_unverified(self):
         clock, page = Clock(), MockPage()
