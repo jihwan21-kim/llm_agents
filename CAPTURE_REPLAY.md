@@ -25,7 +25,6 @@ Requires Python 3.12+, Google Chrome and Git.
 
     git clone https://github.com/jihwan21-kim/llm_agents.git
     cd llm_agents
-    git switch feature/unified-capture-mitm-replay
     .\setup-windows.bat
     .\setup-capture-windows.bat
 
