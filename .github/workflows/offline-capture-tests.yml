@@ -1,0 +1,21 @@
+name: Offline capture replay tests
+on:
+  push:
+    branches: [feature/unified-capture-mitm-replay]
+  pull_request:
+    paths:
+      - capture_replay.py
+      - run_capture_proxy.py
+      - record_site.py
+      - tests/test_capture_replay.py
+      - .github/workflows/offline-capture-tests.yml
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test sanitized snapshot replay
+        run: python -m unittest discover -s tests -p "test_capture_replay.py" -v
