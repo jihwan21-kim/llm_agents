@@ -215,3 +215,25 @@ invent transitions or allow original scripts to run.
 This fix applies to existing recordings. Pull the latest main, stop the
 current mock proxy and restart it with the **same recording folder**;
 no new live-site capture is needed for this issue.
+
+
+## Broad no-change clicks can falsely appear as successful events
+
+The replay event endpoint reports `observed_transition: true` when a
+click matches an existing graph edge, even if that edge was `1 -> 1`
+and the screen did not change. On a recording that contains `click
+body > main no-change`, every click inside `main` could previously
+appear as an observed no-op.
+
+The replay now accepts recorded no-change edges only for the **exact
+clicked element or its interactive control ancestor**, not a generic
+ancestor container. When a click has no supported edge, the proxy logs
+it with `observed_transition: false`. The browser console logs the
+current step and recorded selectors (without typed field values).
+A valid narrower `changed` edge continues to navigate to its
+recorded next state.
+
+This fix does not reconstruct unrecorded page transitions or duplicate
+live-server POST behavior. To investigate missing paths, check the
+existing `transitions.json`, the console warning, and the local event
+list before re-recording.
