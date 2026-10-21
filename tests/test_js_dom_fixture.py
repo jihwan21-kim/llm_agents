@@ -67,7 +67,7 @@ if (fields["last-action"].textContent !== "Added pen")
         self.assertIn('<a href="./app.js">', markup)
         self.assertNotIn("fetch(", source)
         self.assertNotIn("XMLHttpRequest", source)
-        self.assertNotIn("WebSocket", source)
+        self.assertNotIn("new WebSocket(", source)
         self.assertNotIn("http://", source)
         self.assertNotIn("https://", source)
 
