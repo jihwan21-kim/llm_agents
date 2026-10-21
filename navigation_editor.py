@@ -116,9 +116,10 @@ iframe{width:100%;flex:1;border:0;background:white;min-height:0}
 <label for="selector">Selected control (CSS selector)</label><input id="selector" readonly placeholder="Click a button in the preview">
 <label for="to">Destination recorded screen</label><select id="to"></select>
 <button id="save" class="primary" type="button">Save connection</button>
-<button id="test" type="button">Preview selected destination</button>
+<button id="test" type="button">Preview selected destination (read-only)</button>
+<button id="sourcePreview" type="button">Return to source screen</button>
 <div id="message" role="status" aria-live="polite"></div>
-<div class="muted">Saved connections have priority over inferred clicks. Only recorded same-origin, non-sensitive screens are selectable. Test after saving by opening the mock.</div>
+<div class="muted">All recorded destinations can be selected for read-only preview. Saving a connection is supported only between non-sensitive screens on the same origin. Locked destinations cannot be connected.</div>
 </div></section>
 </main></body></html>"""
 
@@ -134,17 +135,18 @@ EDITOR_JS = r"""(() => {
   const selectors = $("selector");
   const saved = $("existing");
   let selectedElement = null;
+  let previewStepId = null;
+  let previewOnly = false;
 
   function stepLabel(s) {
-    return "#" + s.id + "  " + s.path + (s.blocked ? "  [locked]" : "");
+    return "#" + s.id + "  " + s.path + (s.blocked ? "  [read-only]" : "");
   }
-  function fill(select, steps, allowReadOnly = false) {
+  function fill(select, steps) {
     select.replaceChildren();
     for (const s of steps) {
       const option = document.createElement("option");
       option.value = String(s.id);
       option.textContent = stepLabel(s);
-      option.disabled = s.blocked && !allowReadOnly;
       select.append(option);
     }
   }
@@ -186,7 +188,8 @@ EDITOR_JS = r"""(() => {
     const doc = preview.contentDocument;
     if (!doc) return;
     const current = state?.steps.find(s => s.id === Number(sourceSelect.value));
-    if (!current || current.blocked) {
+    if (!current || current.blocked || previewOnly ||
+        previewStepId !== current.id) {
       status.textContent = "Read-only snapshot. Editing is disabled for this screen.";
       return;
     }
@@ -214,7 +217,18 @@ EDITOR_JS = r"""(() => {
     mark(target);
     status.textContent = "Selected: " + (target.textContent || target.getAttribute("aria-label") || target.tagName).trim().slice(0, 80);
   }
-  function loadPreview(id) {
+  function updateSaveAvailability() {
+    const src = state?.steps.find(s => s.id === Number(sourceSelect.value));
+    const dest = state?.steps.find(s => s.id === Number(targetSelect.value));
+    const canEdit = !!src && !src.blocked && !!dest && !dest.blocked &&
+      !previewOnly && previewStepId === src.id;
+    $("save").disabled = !canEdit;
+    $("test").disabled = !dest;
+    $("sourcePreview").disabled = !src;
+    if (dest?.blocked && !previewOnly)
+      status.textContent = "This destination can be previewed, but cannot be connected.";
+  }
+  function loadPreview(id, asDestination = false) {
     selectedSelector = "";
     selectors.value = "";
     selectedElement = null;
@@ -224,16 +238,17 @@ EDITOR_JS = r"""(() => {
       status.textContent = "No saved screen selected.";
       return;
     }
-    const readOnly = src.blocked;
-    // For locked pages, display the already-sanitized recorded DOM without
-    // accepting any click, focus, edit or submission in this iframe.
+    previewStepId = id;
+    previewOnly = !!asDestination;
+    // Selecting a destination never makes it an editable source. Even for
+    // benign targets, destination preview is inert and cannot select controls.
+    const readOnly = src.blocked || previewOnly;
     preview.style.pointerEvents = readOnly ? "none" : "auto";
-    $("save").disabled = readOnly;
-    $("test").disabled = readOnly;
     status.textContent = readOnly
-      ? "Read-only recorded screen. Authentication and payment navigation cannot be edited."
+      ? "Read-only snapshot preview. No navigation or form action is enabled."
       : "";
     preview.src = stepPath(id);
+    updateSaveAvailability();
   }
   preview.addEventListener("load", () => {
     try {
@@ -248,13 +263,14 @@ EDITOR_JS = r"""(() => {
     if (!response.ok) throw Error("Editor state unavailable");
     const previous = preserveSource ? Number(sourceSelect.value) : -1;
     state = await response.json();
-    fill(sourceSelect, state.steps, true);
+    fill(sourceSelect, state.steps);
     fill(targetSelect, state.steps);
     const first = state.steps.find(s => !s.blocked) || state.steps[0];
     const chosen = state.steps.find(s => s.id === previous) || first;
     if (chosen) {
       sourceSelect.value = String(chosen.id);
-      const target = state.steps.find(s => !s.blocked && s.id !== chosen.id);
+      const target = state.steps.find(s => !s.blocked && s.id !== chosen.id)
+        || state.steps.find(s => s.id !== chosen.id);
       if (target) targetSelect.value = String(target.id);
       loadPreview(chosen.id);
     } else {
@@ -303,12 +319,15 @@ EDITOR_JS = r"""(() => {
     }
   }
   sourceSelect.addEventListener("change", () => loadPreview(Number(sourceSelect.value)));
+  targetSelect.addEventListener("change", updateSaveAvailability);
+  $("sourcePreview").addEventListener("click", () => loadPreview(Number(sourceSelect.value)));
   $("save").addEventListener("click", () => {
     const from = Number(sourceSelect.value);
     const to = Number(targetSelect.value);
     const current = state?.steps.find(s => s.id === from);
     const destination = state?.steps.find(s => s.id === to);
-    if (!current || current.blocked || !destination || destination.blocked) {
+    if (!current || current.blocked || !destination || destination.blocked ||
+        previewOnly || previewStepId !== from) {
       status.textContent = "This recorded screen is read-only. No navigation mapping was changed.";
       return;
     }
@@ -320,8 +339,8 @@ EDITOR_JS = r"""(() => {
   });
   $("test").addEventListener("click", () => {
     const to = Number(targetSelect.value);
-    if (state?.steps.some(s => s.id === to && !s.blocked))
-      window.open(stepPath(to), "_blank", "noopener");
+    if (state?.steps.some(s => s.id === to))
+      loadPreview(to, true);
   });
   loadState(false).catch(err => { status.textContent = err.message; });
 })();
