@@ -4,6 +4,16 @@ on:
     branches: [main, feature/unified-capture-mitm-replay]
   pull_request:
     paths:
+      - browser_mail.py
+      - webmail/**
+      - proxy_app.py
+      - run_proxy.py
+      - run_functional_gym.py
+      - open-chrome-windows.bat
+      - main/index.html
+      - main/observer.js
+      - tests/test_browser_mail.py
+      - gym/BROWSER_MAILBOX.md
       - capture_replay.py
       - navigation_editor.py
       - tests/test_navigation_editor.py
