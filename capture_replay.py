@@ -20,50 +20,95 @@ MAX_ASSET_BYTES = 12 * 1024 * 1024
 SIM_JS = r"""
 (() => {
   const config = document.currentScript.dataset;
-  const step = Number(config.step || 0);
-  const total = Number(config.total || 1);
+  const step = Number(config.step || "0");
+  let edges = [];
+  try { edges = JSON.parse(config.transitions || "[]"); }
+  catch (err) { console.error("Invalid recorded transition data", err); }
   let busy = false;
-  function sendAndAdvance(kind, container) {
+
+  function matches(el, edge) {
+    if (!edge.selector || !el) return false;
+    try { return !!el.closest(edge.selector); }
+    catch (_) { return false; }
+  }
+
+  function filledFieldTypes(scope) {
+    const elements = [...(scope?.querySelectorAll?.("input, textarea, select") || [])];
+    return [...new Set(elements.filter(el =>
+      el.type !== "hidden" && String(el.value || "").trim().length > 0
+    ).map(el =>
+      ["password", "email", "tel", "number"].includes(el.type) ? el.type : "other"
+    ))].slice(0, 6);
+  }
+
+  async function record(edge, kind, container) {
     if (busy) return;
     busy = true;
-    const fields = [...(container?.querySelectorAll?.("input,textarea,select") || [])];
-    const kinds = [...new Set(fields.filter(el => {
-      return el.type !== "hidden" && el.value?.trim()?.length > 0;
-    }).map(el => ["password","email","tel","number"].includes(el.type) ? el.type : "other"))];
-    fetch("/__mock_capture/event", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({kind, step, filled_types:kinds})
-    }).then(response => {
-      if (!response.ok) throw Error("local event not recorded");
-      if (step + 1 < total) {
-        const params = new URLSearchParams(location.search);
-        params.set("__mock_step", String(step + 1));
-        location.assign(location.pathname + "?" + params.toString());
+    const payload = {
+      kind, step, to: edge ? edge.to : step,
+      selector: edge?.selector || "",
+      filled_types: filledFieldTypes(container),
+      observed_transition: Boolean(edge?.observed)
+    };
+    try {
+      const response = await fetch("/__mock_capture/event", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw Error("Event recording failed");
+      if (edge && edge.outcome === "changed" && edge.to !== step && edge.to_path) {
+        const url = new URL(edge.to_path, location.origin);
+        url.searchParams.set("__mock_step", String(edge.to));
+        location.assign(url.pathname + url.search);
       }
-    }).catch(err => console.error("Mock event failed", err))
-      .finally(() => { busy = false; });
+    } catch (error) { console.error("Offline mock event failed", error); }
+    finally { busy = false; }
   }
-  document.addEventListener("submit", e => {
-    e.preventDefault();
-    sendAndAdvance("form_submit", e.target);
+
+  document.addEventListener("click", event => {
+    const target = event.target instanceof Element
+      ? event.target.closest("button, a, input[type=submit], input[type=button], [role=button]")
+      : null;
+    if (!target) return;
+    // No captured original links or scripts are allowed to navigate.
+    event.preventDefault();
+    const edge = edges.find(e => e.kind === "click" && matches(target, e));
+    const submitEdge = target.closest("form")
+      ? edges.find(e => e.kind === "submit" && matches(target.closest("form"), e))
+      : null;
+    record(edge || submitEdge || null, "button_click",
+           target.closest("form") || document);
   }, true);
-  document.addEventListener("click", e => {
-    const el = e.target.closest("button, input[type=submit]");
-    if (!el || el.closest("form")) return;
-    e.preventDefault();
-    sendAndAdvance("button_click", document);
+
+  document.addEventListener("submit", event => {
+    event.preventDefault();
+    const edge = edges.find(e => e.kind === "submit" && matches(event.target, e));
+    record(edge || null, "form_submit", event.target);
+  }, true);
+
+  document.addEventListener("change", event => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const edge = edges.find(e => e.kind === "change" && matches(target, e));
+    if (edge) record(edge, "field_change", target.closest("form") || document);
   }, true);
 })();
 """
-
 
 def rewrite_css(value, base_url, asset_urls):
     def replace(match):
         original = match.group(2).strip()
         asset = asset_urls.get(urljoin(base_url, original))
         return "url('" + asset + "')" if asset else "url('')"
-    return re.sub(r"url\(\s*(['\"]?)([^)'\"\s]+)\1\s*\)", replace, value, flags=re.I)
+    result = re.sub(r"url\(\s*(['\"]?)([^)'\"\s]+)\1\s*\)", replace, value, flags=re.I)
+    # Rewrite quoted @import files as well as url(...) references.
+    result = re.sub(
+        r"@import\s+(['\"])([^'\"]+)\1",
+        lambda m: "@import url('" + asset_urls.get(urljoin(base_url, m.group(2)), "") + "')",
+        result, flags=re.I,
+    )
+    return result
 
 
 class SnapshotSanitizer(HTMLParser):
@@ -110,7 +155,15 @@ class SnapshotSanitizer(HTMLParser):
                 else:
                     value = self.asset_urls.get(urljoin(self.page_url, value), "")
             elif low == "srcset":
-                value = ""
+                candidates = []
+                for candidate in value.split(","):
+                    parts = candidate.strip().split()
+                    if not parts:
+                        continue
+                    asset = self.asset_urls.get(urljoin(self.page_url, parts[0]))
+                    if asset:
+                        candidates.append(" ".join([asset] + parts[1:]))
+                value = ", ".join(candidates)
             elif low == "style":
                 value = rewrite_css(value, self.page_url, self.asset_urls)
             elif tag == "input" and low == "value":
@@ -160,6 +213,7 @@ class CaptureReplay:
             raise ValueError("Invalid startUrl in bundle")
         self.host = parsed.hostname.lower()
         self.steps = self.bundle.get("steps", [])
+        self.transitions = self.bundle.get("transitions", [])
         if not self.steps:
             raise ValueError("No recorded HTML snapshots")
         har = json.loads((self.directory / "trace.har").read_text(encoding="utf-8"))
@@ -203,8 +257,31 @@ class CaptureReplay:
             parser = SnapshotSanitizer(source, self.urls)
             parser.feed(file.read_text(encoding="utf-8", errors="replace"))
             parser.close()
+            edges = []
+            for transition in self.transitions:
+                if transition.get("from") != index:
+                    continue
+                destination = transition.get("to")
+                if type(destination) is not int or destination >= len(self.steps) or destination < 0:
+                    continue
+                target_url = urlsplit(self.steps[destination].get("url") or self.start_url)
+                # All navigation remains on the one captured origin.
+                if target_url.hostname != self.host:
+                    continue
+                edges.append({
+                    "kind": transition.get("kind"),
+                    "selector": str(transition.get("selector", ""))[:256],
+                    "observed": bool(transition.get("observed")),
+                    "to": destination,
+                    "to_path": target_url.path or "/",
+                    "outcome": transition.get("outcome"),
+                })
+            # Legacy manual recordings do not contain action-to-state edges.
+            # They remain inspectable through __mock_step, but no longer advance
+            # to an arbitrary next screen on unrelated button clicks.
+            transitions_attr = html.escape(json.dumps(edges), quote=True)
             shim = (f'<script src="{SIMULATOR}" data-step="{index}" '
-                    f'data-total="{len(self.steps)}"></script>')
+                    f'data-transitions="{transitions_attr}"></script>')
             page = "".join(parser.result)
             page = (page.replace("</body>", shim + "</body>", 1)
                     if "</body>" in page else page + shim)
@@ -223,11 +300,22 @@ class CaptureReplay:
             return 404, b"Not captured", "text/plain"
         # The displayed URL preserves the original recorded hostname and path.
         # The query selects an offline snapshot, never the real website.
-        idx_raw = parse_qs(query).get("__mock_step", ["0"])[0]
+        requested = parse_qs(query).get("__mock_step")
+        if requested is None:
+            default_idx = next(
+                (i for i, st in enumerate(self.steps)
+                 if urlsplit(st.get("url") or self.start_url).hostname == self.host
+                 and (urlsplit(st.get("url") or self.start_url).path or "/") == path),
+                0
+            )
+            idx_raw = str(default_idx)
+        else:
+            idx_raw = requested[0]
         if not idx_raw.isdecimal() or int(idx_raw) not in self.pages:
             return 404, b"Unknown snapshot", "text/plain"
-        if path == urlsplit(self.start_url).path or (
-                path == "/" and urlsplit(self.start_url).path in {"", "/"}):
-            body = self.pages[int(idx_raw)]
+        index = int(idx_raw)
+        saved_url = urlsplit(self.steps[index].get("url") or self.start_url)
+        if saved_url.hostname == self.host and path == (saved_url.path or "/"):
+            body = self.pages[index]
             return 200, body if method == "GET" else b"", "text/html; charset=utf-8"
         return 404, b"Not captured", "text/plain"

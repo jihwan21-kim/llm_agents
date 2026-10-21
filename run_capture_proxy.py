@@ -80,26 +80,46 @@ class RecordedMockProxy(MockProxy):
             try:
                 payload = json.loads((request.raw_content or b"").decode("utf-8"))
                 if not isinstance(payload, dict) or payload.get("kind") not in {
-                    "form_submit", "button_click"
+                    "form_submit", "button_click", "field_change"
                 }:
                     raise ValueError("unknown event")
                 step = payload.get("step")
                 kinds = payload.get("filled_types")
+                target = payload.get("to")
+                selector = payload.get("selector", "")
                 if type(step) is not int or step < 0 or step >= len(self.capture.steps):
                     raise ValueError("invalid step")
+                if type(target) is not int or target < 0 or target >= len(self.capture.steps):
+                    raise ValueError("invalid target step")
+                if not isinstance(selector, str) or len(selector) > 256:
+                    raise ValueError("invalid selector")
                 if not isinstance(kinds, list) or len(kinds) > 6 or any(
                         k not in ALLOWED_FIELDS for k in kinds):
                     raise ValueError("invalid types")
             except (ValueError, TypeError, UnicodeError):
                 return self._respond(flow, 400, b"Invalid synthetic event")
+            action_kinds = {
+                "button_click": {"click", "submit"},
+                "form_submit": {"submit"},
+                "field_change": {"change"},
+            }
+            observed = any(
+                edge.get("from") == step and edge.get("to") == target
+                and edge.get("kind") in action_kinds[payload["kind"]]
+                and edge.get("selector") == selector
+                and bool(edge.get("observed"))
+                for edge in self.capture.transitions
+            )
             event = {"time": datetime.now(timezone.utc).isoformat(),
-                     "kind": payload["kind"], "step": step,
+                     "kind": payload["kind"], "step": step, "to": target if observed else step,
+                     "observed_transition": observed,
                      "filled_types": kinds, "upstream_sent": False,
                      "simulated": True}
             self.capture_events.append(event)
             self.capture_events = self.capture_events[-1000:]
             self._metadata_log("capture_simulated_event", path, "POST")
-            return self._respond(flow, 200, b'{"recorded":true}',
+            return self._respond(flow, 200, json.dumps({"recorded": True, "observed": observed,
+                                                       "to": target if observed else step}).encode(),
                                  "application/json; charset=utf-8")
 
         if request.method not in {"GET", "HEAD"}:
