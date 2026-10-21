@@ -46,14 +46,24 @@ The editor lives on the **recorded site's local mock origin**, not
    select it. The editor intercepts this click; it does not activate the
    recorded action, submit a form or navigate. A selected control gains a
    blue outline.
-3. On the right, choose the desired **destination screen** from the
-   recording, and click **Save connection**.
-4. Open the mock with **Open mock** (or launch the ordinary
+3. On the right, choose any saved **destination screen**, including
+   those labeled **[read-only]**. Click **Preview selected destination
+   (read-only)** to display that snapshot inside the inert editor preview.
+   You can also use **Previous recorded screen** and **Next recorded screen**
+   to step through *all* saved screenshots/DOM states in chronological
+   capture order, or **Return to source screen** to choose another button.
+   This is inspection only; the snapshot sequence is not proof that a
+   particular button caused the next page.
+4. For two eligible **non-sensitive** same-origin screens, click
+   **Save connection** after selecting a button. Locked authentication,
+   credential, OTP, payment and account pages can be previewed but cannot
+   be linked as a source or destination.
+5. Open the mock with **Open mock** (or launch the ordinary
    `start-har-mock-windows.bat "<recording-folder>"` command) to test
    the saved connection. If a recorded click was initially mapped
    incorrectly or recorded as a no-op, the manual mapping for that
    selector has priority.
-5. Use **Delete mapping** in the left pane to remove a saved correction.
+6. Use **Delete mapping** in the left pane to remove a saved correction.
 
 An override is stored in the recording directory:
 
@@ -76,10 +86,13 @@ mock restarts; new recordings have independent edits.
   or reach unrecorded URLs.
 - Authentication, account, password, verification, wallet, checkout and
   payment screens remain **locked from navigation edits**, including screens
-  identified by sensitive form fields. They are now selectable in the left
-  pane solely to see their inert, read-only snapshot in the center; Save
-  connection is disabled and the server still rejects any attempt to use
-  them as a source or destination. The preview sandbox does not execute
+  identified by sensitive form fields. They are selectable in both the
+  left **source** picker and right **destination** picker solely to see
+  inert, read-only snapshots in the center. The preview accepts no input
+  or clicks, Save connection is disabled and the server still rejects
+  any attempt to use them as a source or destination. **Next/Previous**
+  browses recorded states without creating a working login/OTP flow.
+  The preview sandbox does not execute
   original or simulation JavaScript. This does not repair third-party login
   submission chains. Use a reviewed first-party synthetic fixture for
   credential-free agent behavior experiments.
