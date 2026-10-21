@@ -22,11 +22,19 @@ from record_site import ROOT, sanitize_har
 from navigation_analysis import analyze_recording
 
 MARKER = "__MOCK_AUTO_EVENT__"
+
+# Do not attribute the first transient DOM state to an action. Wait for a
+# quiet interval, but bound the wait on pages with perpetual mutations.
+SETTLE_QUIET_SECONDS = 1.75
+NO_CHANGE_WAIT_SECONDS = 3.5
+MAX_SETTLE_SECONDS = 10.0
 EVENT_SCRIPT = r"""
 (() => {
   if (window.__mockAutoCapture) return;
   window.__mockAutoCapture = true;
   const emit = e => console.log("__MOCK_AUTO_EVENT__" + JSON.stringify(e));
+  let nextActionId = 0;
+  const emitAction = e => emit({...e, action_id: ++nextActionId});
   // Many JS-driven sites use clickable DIV/SPAN elements instead of BUTTON.
   // Capture all non-input clicks, preferring a stable interactive ancestor,
   // so we can replay the observed choice rather than any arbitrary button.
@@ -62,15 +70,15 @@ EVENT_SCRIPT = r"""
     const el = elementFor(e);
     if (!el || el.closest("input[type=password], textarea, [contenteditable]")) return;
     const picked = el.closest(interactive) || el;
-    emit({kind:"click", selector:selector(picked), tag:picked.tagName.toLowerCase()});
+    emitAction({kind:"click", selector:selector(picked), tag:picked.tagName.toLowerCase()});
   }, true);
   document.addEventListener("submit", e => {
-    emit({kind:"submit", selector:selector(e.target), tag:"form"});
+    emitAction({kind:"submit", selector:selector(e.target), tag:"form"});
   }, true);
   document.addEventListener("change", e => {
     const el = e.target;
     if (el && ["SELECT", "INPUT"].includes(el.tagName) && el.type !== "password")
-      emit({kind:"change", selector:selector(el), tag:el.tagName.toLowerCase()});
+      emitAction({kind:"change", selector:selector(el), tag:el.tagName.toLowerCase()});
   }, true);
   // Observe JS routing while the original site is running in the isolated
   // capture browser. Keep the original history methods' behavior intact.
@@ -171,6 +179,8 @@ class Recorder:
         self.page, self.out, self.limit = page, out, limit
         self.steps, self.transitions, self.action_events = [], [], []
         self.navigation_events = []
+        self.blocked_writes = []
+        self.completed_actions = []
         self.pending, self.last_change = None, 0
         self.seen_mutation = False
         self.mutation_started = None
@@ -227,21 +237,73 @@ class Recorder:
             self.seen_mutation = True
             self.last_change = now
         elif event.get("kind") in {"click", "submit", "change"}:
+            # Do not silently merge different human actions into one edge.
+            # If a new action arrives before the previous one has settled,
+            # its cause is ambiguous: record that explicitly.
+            if self.pending:
+                self._complete_pending("interrupted", observed=False)
+            seq = len(self.action_events)
+            incoming = event.get("action_id")
+            action_id = incoming if type(incoming) is int and incoming >= 0 else seq + 1
+            selector = str(event.get("selector", ""))[:256]
             self.action_events.append({
-                "kind": event["kind"],
-                "selector": str(event.get("selector", ""))[:256],
-                "from": self.current_index,
-                "seq": len(self.action_events)
+                "action_id": action_id, "kind": event["kind"],
+                "selector": selector, "from": self.current_index,
+                "seq": seq, "outcome": "pending"
             })
-            if self.pending is None:
-                self.pending = {
-                    "kind": event["kind"],
-                    "selector": str(event.get("selector", ""))[:256],
-                    "tag": str(event.get("tag", ""))[:32],
-                    "from": self.current_index,
-                    "started": now,
-                }
+            self.pending = {
+                "kind": event["kind"], "selector": selector,
+                "tag": str(event.get("tag", ""))[:32],
+                "from": self.current_index,
+                "started": now, "action_id": action_id,
+                "seq": seq, "blocked_write": False,
+            }
             self.last_change = now
+
+    def _complete_pending(self, outcome, destination=None, observed=False):
+        """Close exactly one action; never label a blocked/overlapped action verified."""
+        if self.pending is None:
+            return
+        action = self.pending
+        src = action["from"]
+        if type(src) is int and 0 <= src < len(self.steps):
+            if destination is None:
+                destination = src
+            edge = {
+                "kind": action["kind"], "selector": action["selector"],
+                "tag": action["tag"], "from": src, "to": destination,
+                "outcome": outcome, "observed": observed,
+                "action_id": action["action_id"],
+            }
+            if action.get("blocked_write"):
+                edge["blocked_write"] = True
+            if edge not in self.transitions:
+                self.transitions.append(edge)
+        seq = action.get("seq")
+        if type(seq) is int and seq < len(self.action_events):
+            self.action_events[seq].update({
+                "outcome": outcome, "to": destination,
+                "observed_transition": observed,
+                "blocked_write": bool(action.get("blocked_write")),
+            })
+        self.completed_actions.append({
+            "action_id": action["action_id"], "outcome": outcome,
+            "from": src, "to": destination, "blocked_write": bool(action.get("blocked_write"))
+        })
+        self.pending = None
+
+    def on_blocked_write(self, method):
+        """Read-only capture guard; never stores request bodies or destinations."""
+        allowed = {"POST", "PUT", "PATCH", "DELETE"}
+        if method.upper() not in allowed:
+            return
+        row = {
+            "method": method.upper(),
+            "pending_action_id": self.pending["action_id"] if self.pending else None,
+        }
+        self.blocked_writes.append(row)
+        if self.pending:
+            self.pending["blocked_write"] = True
 
     def state(self):
         try:
@@ -285,10 +347,7 @@ class Recorder:
             })
             self.state_index[signature] = idx
         if self.pending and self.pending["from"] >= 0:
-            edge = {k: self.pending[k] for k in ["kind", "selector", "tag", "from"]}
-            edge.update({"to": idx, "outcome": "changed", "observed": True})
-            if edge not in self.transitions:
-                self.transitions.append(edge)
+            self._complete_pending("changed", destination=idx, observed=True)
         elif (reason == "dom-change" and previous_idx >= 0 and idx != previous_idx
               and previous_url == url):
             # DOM-only settling is observed chronology, not observed action
@@ -313,38 +372,55 @@ class Recorder:
             self.snapshot("initial")
             return
         now = time.monotonic()
-        if not self.pending and not self.seen_mutation and self.page.url == self.steps[-1]["url"]:
-            return
-        # Debounce rapidly changing pages, but avoid waiting forever on animations.
-        age = now - self.pending["started"] if self.pending else 0
+        if not self.pending and not self.seen_mutation:
+            # The URL can change without a DOM mutation (History API).
+            if self.page.url == self.steps[self.current_index]["url"]:
+                return
+            self.seen_mutation = True
+            self.mutation_started = now
+            self.last_change = now
         quiet = now - self.last_change
-        activity_age = age if self.pending else (now - (self.mutation_started or now))
-        if quiet < 0.65 and activity_age < 2.5:
+        if self.pending:
+            age = now - self.pending["started"]
+            if quiet < SETTLE_QUIET_SECONDS and age < MAX_SETTLE_SECONDS:
+                return
+        elif quiet < SETTLE_QUIET_SECONDS and (
+                now - (self.mutation_started or now)) < MAX_SETTLE_SECONDS:
             return
+
         state = self.state()
         if not state:
             return
-        current_signature = hashlib.sha256((state[0] + "\n" + state[1]).encode()).hexdigest()
-        if current_signature != self.saved_signature:
+        signature = hashlib.sha256((state[0] + "\\n" + state[1]).encode()).hexdigest()
+        if signature != self.saved_signature:
             self.snapshot(self.pending["kind"] if self.pending else "dom-change", state)
-        elif self.pending and age > 1.5:
-            edge = {k: self.pending[k] for k in ["kind", "selector", "tag", "from"]}
-            edge.update({"to": edge["from"], "outcome": "no-change", "observed": True})
-            self.transitions.append(edge)
-            self.pending = None
-            self.seen_mutation = False
-            self.mutation_started = None
-        elif not self.pending:
-            self.seen_mutation = False
-            self.mutation_started = None
+            return
+        if self.pending:
+            # A click with no UI change is *not* a recorded navigation.
+            # Give delayed application callbacks enough time to run.
+            if age >= NO_CHANGE_WAIT_SECONDS:
+                outcome = "blocked-write" if self.pending.get("blocked_write") else "no-change"
+                self._complete_pending(outcome, observed=outcome == "no-change")
+                self.seen_mutation = False
+                self.mutation_started = None
+            return
+        self.seen_mutation = False
+        self.mutation_started = None
 
     def finish(self):
+        # A final snapshot is allowed, but don't invent an action outcome if
+        # the browser closes during a delayed callback.
         self.poll()
+        if self.pending:
+            state = self.state()
+            if state:
+                url, html = state
+                signature = hashlib.sha256((url + "\\n" + html).encode()).hexdigest()
+                if signature != self.saved_signature:
+                    self.snapshot(self.pending["kind"], state)
+        if self.pending:
+            self._complete_pending("unfinished", observed=False)
         self.snapshot("final")
-        if self.pending and self.pending["from"] >= 0:
-            edge = {k: self.pending[k] for k in ["kind", "selector", "tag", "from"]}
-            edge.update({"to": self.current_index, "outcome": "final", "observed": True})
-            self.transitions.append(edge)
         return self.steps, self.transitions
 
 
@@ -403,6 +479,7 @@ def main():
         def capture_read_only(route):
             if route.request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
                 print("Blocked live write:", route.request.method)
+                recorder.on_blocked_write(route.request.method)
                 route.abort()
             else:
                 route.continue_()
@@ -473,6 +550,10 @@ def main():
     )
     (out / "navigation-events.json").write_text(
         json.dumps(recorder.navigation_events, indent=2), encoding="utf-8"
+    )
+    # Request METHODS and action ids only. Never capture request bodies.
+    (out / "blocked-writes.json").write_text(
+        json.dumps(recorder.blocked_writes, indent=2), encoding="utf-8"
     )
     navigation_report = analyze_recording(out)
     (out / "navigation-analysis.json").write_text(
