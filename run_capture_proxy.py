@@ -34,6 +34,10 @@ class RecordedMockProxy(MockProxy):
         print(f"Offline replay: {self.capture.host} with "
               f"{len(self.capture.steps)} snapshots and {len(self.capture.assets)} assets",
               flush=True)
+        print("FIDELITY WARNING: this is sanitized static snapshot replay. "
+              "Captured original JS does NOT run; backend effects are not reproduced. "
+              "Use fidelity_audit.py for a case-specific gap report.",
+              flush=True)
         print(f"Initial displayed state: {self.capture.initial_step}",
               flush=True)
         print(f"HTML href destinations mapped: {len(self.capture.inferred_edges)} (inferred, not observed)",
