@@ -36,6 +36,8 @@ class RecordedMockProxy(MockProxy):
               flush=True)
         print(f"Initial displayed state: {self.capture.initial_step}",
               flush=True)
+        print(f"HTML href destinations mapped: {len(self.capture.inferred_edges)} (inferred, not observed)",
+              flush=True)
 
     def _respond(self, flow, status, body=b"", mime="text/plain"):
         flow.response = http.Response.make(status, body, {
@@ -112,16 +114,26 @@ class RecordedMockProxy(MockProxy):
                 and bool(edge.get("observed"))
                 for edge in self.capture.transitions
             )
+            static_navigation = any(
+                edge["from"] == step and edge["to"] == target
+                and edge["selector"] == selector and edge["kind"] == "click"
+                and edge["outcome"] == "html-href"
+                for edge in self.capture.inferred_edges
+            ) if payload["kind"] == "button_click" else False
+            allowed = observed or static_navigation
             event = {"time": datetime.now(timezone.utc).isoformat(),
-                     "kind": payload["kind"], "step": step, "to": target if observed else step,
+                     "kind": payload["kind"], "step": step,
+                     "to": target if allowed else step,
                      "observed_transition": observed,
+                     "static_navigation": static_navigation,
                      "filled_types": kinds, "upstream_sent": False,
                      "simulated": True}
             self.capture_events.append(event)
             self.capture_events = self.capture_events[-1000:]
             self._metadata_log("capture_simulated_event", path, "POST")
             return self._respond(flow, 200, json.dumps({"recorded": True, "observed": observed,
-                                                       "to": target if observed else step}).encode(),
+                                                       "static_navigation": static_navigation,
+                                                       "to": target if allowed else step}).encode(),
                                  "application/json; charset=utf-8")
 
         if request.method not in {"GET", "HEAD"}:

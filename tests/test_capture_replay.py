@@ -177,7 +177,10 @@ vm.runInNewContext(sim, {
   location: {origin:"https://example.test", assign: url => {clickedUrl = url;}},
   fetch: async (url, options) => {
     posted = JSON.parse(options.body);
-    return {ok:true};
+    return {ok:true, json:async()=>({
+      to:posted.to, observed:posted.observed_transition,
+      static_navigation:false
+    })};
   }
 });
 listeners.click({
@@ -207,6 +210,107 @@ setTimeout(() => {
         completed = subprocess.run([node, "-e", harness], capture_output=True,
                                    text=True, timeout=10, check=False)
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_extract_html_and_javascript_navigation_without_execution(self):
+        from navigation_analysis import (
+            extract_html_navigation, extract_js_route_literals, analyze_recording
+        )
+        url = "https://example.test/a/b"
+        markup = ('<html><body><a href="/checkout?token=private">Checkout</a>'
+                  '<a href="https://external.test/steal">Outside</a>'
+                  '<form action="/submit" method="POST"></form></body></html>')
+        routes = extract_html_navigation(markup, url)
+        self.assertEqual(len(routes), 2)
+        self.assertEqual(routes[0]["target_path"], "/checkout")
+        self.assertEqual(routes[0]["selector"], 'a[data-mock-link-index="0"]')
+        self.assertEqual(routes[1]["kind"], "form")
+        self.assertEqual(routes[1]["method"], "POST")
+        js = ('navigate("/login"); window.location.assign("/reset");'
+              'router.push("/cart"); const hidden="/ignored";')
+        self.assertEqual(extract_js_route_literals(js, url),
+                         ["/login", "/reset", "/cart"])
+        with tempfile.TemporaryDirectory() as tmp:
+            self.make_recording(tmp)
+            folder = Path(tmp)
+            (folder / "step-000.html").write_text(markup)
+            har = json.loads((folder / "trace.har").read_text())
+            har["log"]["entries"].append({
+                "request": {"method":"GET", "url":"https://example.test/main.js"},
+                "response": {"content":{"mimeType":"text/javascript",
+                                       "text":js}}
+            })
+            (folder / "trace.har").write_text(json.dumps(har))
+            report = analyze_recording(folder)
+            self.assertEqual(report["html_route_count"], 2)
+            self.assertEqual(report["js_route_hint_count"], 3)
+            self.assertNotIn("token=private", json.dumps(report))
+            self.assertNotIn("external.test/steal", json.dumps(report))
+
+    def test_static_same_origin_anchor_replay_requires_captured_destination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.make_recording(tmp)
+            folder = Path(tmp)
+            (folder / "step-000.html").write_text(
+                '<html><body><a href="/login">Login</a>'
+                '<a href="https://external.test/">External</a>'
+                '<a href="/unknown">Unknown</a></body></html>'
+            )
+            bundle = json.loads((folder / "bundle.json").read_text())
+            bundle["steps"][1]["url"] = "https://example.test/login"
+            (folder / "bundle.json").write_text(json.dumps(bundle))
+            replay = CaptureReplay(tmp)
+            self.assertEqual(len(replay.inferred_edges), 1)
+            edge = replay.inferred_edges[0]
+            self.assertEqual((edge["from"], edge["to"], edge["outcome"]),
+                             (0, 1, "html-href"))
+            self.assertEqual(edge["selector"], 'a[data-mock-link-index="0"]')
+            status, body, _ = replay.respond("GET", "/a/b")
+            self.assertEqual(status, 200)
+            rendered = body.decode()
+            self.assertIn('data-mock-link-index="0"', rendered)
+            self.assertIn("html-href", rendered)
+            self.assertNotIn("external.test", rendered)
+            self.assertEqual(replay.respond("GET", "/login", "__mock_step=1")[0], 200)
+
+    def test_history_navigation_is_recorded_as_a_graph_edge(self):
+        import ast
+        import hashlib
+        import time
+        source = (Path(__file__).resolve().parents[1] / "automatic_capture.py").read_text()
+        tree = ast.parse(source)
+        node = next(n for n in tree.body
+                    if isinstance(n, ast.ClassDef) and n.name == "Recorder")
+        scope = {"hashlib":hashlib, "time":time, "json":json,
+                 "MARKER":"__MOCK_AUTO_EVENT__", "SNAPSHOT_JS":""}
+        exec(compile(ast.Module(body=[node], type_ignores=[]),
+                     "automatic_capture.py", "exec"), scope)
+
+        class Page:
+            def __init__(self):
+                self.url = "https://example.test/start"
+                self.dom = "<html><body>Start</body></html>"
+                self.main_frame = object()
+            def on(self, kind, callback):
+                pass
+            def evaluate(self, code):
+                return self.dom
+            def screenshot(self, path, **kwargs):
+                Path(path).write_bytes(b"PNG")
+
+        class Message:
+            text = '__MOCK_AUTO_EVENT__{"kind":"history","operation":"popstate"}'
+
+        with tempfile.TemporaryDirectory() as t:
+            page = Page()
+            rec = scope["Recorder"](page, Path(t), 10)
+            rec.snapshot("initial")
+            rec.on_console(Message())
+            page.url = "https://example.test/back"
+            page.dom = "<html><body>Back</body></html>"
+            rec.snapshot("browser_navigation")
+            self.assertEqual(rec.transitions[0]["kind"], "browser_navigation")
+            self.assertEqual((rec.transitions[0]["from"], rec.transitions[0]["to"]), (0, 1))
+            self.assertEqual(rec.navigation_events[0]["operation"], "popstate")
 
     def test_entry_skips_unaimed_loading_states(self):
         with tempfile.TemporaryDirectory() as t:

@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout, Error as PlaywrightError
 from record_site import ROOT, sanitize_har
+from navigation_analysis import analyze_recording
 
 MARKER = "__MOCK_AUTO_EVENT__"
 EVENT_SCRIPT = r"""
@@ -71,8 +72,21 @@ EVENT_SCRIPT = r"""
     if (el && ["SELECT", "INPUT"].includes(el.tagName) && el.type !== "password")
       emit({kind:"change", selector:selector(el), tag:el.tagName.toLowerCase()});
   }, true);
-  addEventListener("hashchange", () => emit({kind:"mutation"}));
-  addEventListener("popstate", () => emit({kind:"mutation"}));
+  // Observe JS routing while the original site is running in the isolated
+  // capture browser. Keep the original history methods' behavior intact.
+  for (const operation of ["pushState", "replaceState"]) {
+    const original = history[operation];
+    if (typeof original !== "function") continue;
+    try {
+      history[operation] = function(...args) {
+        const result = original.apply(this, args);
+        emit({kind:"history", operation});
+        return result;
+      };
+    } catch (_) { /* Some sites lock down history methods. */ }
+  }
+  addEventListener("hashchange", () => emit({kind:"history", operation:"hashchange"}));
+  addEventListener("popstate", () => emit({kind:"history", operation:"popstate"}));
   let queued = false;
   const schedule = () => {
     if (queued) return;
@@ -156,6 +170,7 @@ class Recorder:
     def __init__(self, page, out, limit):
         self.page, self.out, self.limit = page, out, limit
         self.steps, self.transitions, self.action_events = [], [], []
+        self.navigation_events = []
         self.pending, self.last_change = None, 0
         self.seen_mutation = False
         self.mutation_started = None
@@ -163,6 +178,23 @@ class Recorder:
         self.current_index = -1
         self.state_index = {}
         page.on("console", self.on_console)
+        page.on("framenavigated", self.on_frame_navigation)
+
+    def on_frame_navigation(self, frame):
+        # Full-document navigation, including browser back/forward, does not
+        # always cause an in-page popstate event.
+        if frame is not getattr(self.page, "main_frame", None) or self.current_index < 0:
+            return
+        now = time.monotonic()
+        self.navigation_events.append({
+            "operation": "document_navigation", "from": self.current_index,
+        })
+        if self.pending is None:
+            self.pending = {
+                "kind": "browser_navigation", "selector": "", "tag": "",
+                "from": self.current_index, "started": now,
+            }
+        self.last_change = now
 
     def on_console(self, msg):
         raw = msg.text
@@ -173,7 +205,23 @@ class Recorder:
         except (ValueError, TypeError):
             return
         now = time.monotonic()
-        if event.get("kind") == "mutation":
+        if event.get("kind") == "history":
+            operation = str(event.get("operation", ""))[:32]
+            if operation not in {"pushState", "replaceState", "popstate", "hashchange"}:
+                return
+            self.navigation_events.append({
+                "operation": operation, "from": self.current_index,
+            })
+            if self.pending is None and self.current_index >= 0:
+                self.pending = {
+                    "kind": "browser_navigation", "selector": "", "tag": "",
+                    "from": self.current_index, "started": now,
+                }
+            if not self.seen_mutation:
+                self.mutation_started = now
+            self.seen_mutation = True
+            self.last_change = now
+        elif event.get("kind") == "mutation":
             if not self.seen_mutation:
                 self.mutation_started = now
             self.seen_mutation = True
@@ -410,6 +458,15 @@ def main():
     (out / "action-events.json").write_text(
         json.dumps(recorder.action_events, indent=2), encoding="utf-8"
     )
+    (out / "navigation-events.json").write_text(
+        json.dumps(recorder.navigation_events, indent=2), encoding="utf-8"
+    )
+    navigation_report = analyze_recording(out)
+    (out / "navigation-analysis.json").write_text(
+        json.dumps(navigation_report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"Navigation clues: {navigation_report['html_route_count']} HTML links/forms, "
+          f"{navigation_report['js_route_hint_count']} JavaScript literal routes.")
     clicks = sum(a["kind"] == "click" for a in recorder.action_events)
     print(f"Saved {len(steps)} states, {len(transitions)} action edges, {assets} assets and {count} HAR entries.")
     print(f"Captured {clicks} clicks and {len(recorder.action_events)} total user actions.")

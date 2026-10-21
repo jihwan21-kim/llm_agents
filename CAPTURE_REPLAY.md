@@ -237,3 +237,42 @@ This fix does not reconstruct unrecorded page transitions or duplicate
 live-server POST behavior. To investigate missing paths, check the
 existing `transitions.json`, the console warning, and the local event
 list before re-recording.
+
+
+## Analyze HTML + captured JavaScript navigation (without running source code)
+
+The saved HAR already retains inert JavaScript GET/HEAD resource bodies.
+To inspect an **existing** recording (no new live access needed), run:
+
+    .venv\Scripts\python.exe navigation_analysis.py ".\recordings\mercadolivre\auto-flow-fixed-20261021T020202Z"
+
+This creates `navigation-analysis.json`, containing:
+- `html_routes`: literal same-origin `<a href>` and `<form action>` destinations from each saved DOM state
+- `js_route_hints`: literal paths from common JS navigation idioms such as `navigate("/path")`,
+  `router.push("/path")`, `location.assign("/path")` and `location.href = "/path"`
+- Recorded state/transition counts for comparison
+
+HTML hints and JS hints are **not verified user actions**. JavaScript can use
+computed paths, event delegation, minified frameworks, closures, server-side
+responses and dynamic values, none of which can be completely resolved from
+static HTML/JS text. This report strips query strings and excludes external
+targets. Source scripts are never executed to produce the report.
+
+Offline replay can additionally follow an inferred **same-origin HTML anchor
+link** if its destination path maps to exactly one recorded HTML state.
+The local proxy independently validates this match. Events for these paths
+have `static_navigation: true` and `observed_transition: false` to prevent
+mistaking inferred routes for experimentally observed outcomes.
+Forms, JavaScript-only routes, external origins, and ambiguous SPA paths
+are **not** automatically followed.
+
+New automatic captures also save `navigation-events.json`, containing
+metadata-only observations of History API push/replace state, popstate,
+hashchange and main-frame document navigations. These help build cycles and
+revisit edges without executing captured source scripts during offline replay.
+History events do not reliably distinguish toolbar Back from programmatic
+history movement; the recorded operation names reflect that uncertainty.
+
+Do not re-enable recorded `<script>`, `onclick` or remote resources inside
+the replay. Doing so would make the security experiment capable of issuing
+uncontrolled network requests and would undermine its local-only guarantees.
