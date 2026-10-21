@@ -1,3 +1,13 @@
+## Functional Replay: site-specific JavaScript + local API (reviewed fixtures)
+
+Use [Functional Replay Mode](gym/FUNCTIONAL_REPLAY.md) to run two
+independent synthetic websites with their own original `app.js`, real DOM
+events, deterministic local API replies and no generic `sim.js`. On Windows:
+`.\\start-functional-gym-windows.bat study-board` or `js-demo`.
+The functional runner accepts only approved `.test` fixtures. A recorded
+third-party/phishing HAR remains inert under the older snapshot replay and
+cannot be made functional simply by switching launch flags.
+
 ## Fidelity preflight and dynamic research gym design
 
 **Important:** Captured HTML/HAR replay is a *sanitized snapshot simulation*.
