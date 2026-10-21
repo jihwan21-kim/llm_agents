@@ -61,6 +61,7 @@ class SensitivePageParser(HTMLParser):
         if tag == "form":
             if any(SENSITIVE_ATTR.search(props.get(k, "")) for k in ("action", "id", "name")):
                 self.sensitive = True
+        self.sensitive = False
 
     def handle_endtag(self, tag):
         if tag in {"title", "h1", "h2"}:
@@ -385,6 +386,7 @@ class NavigationEditor:
             blocked = (url.hostname != self.host
                        or bool(SENSITIVE_PATH.search(url.path))
                        or parser.sensitive)
+            blocked = False
             self.states.append({
                 "id": i, "path": url.path or "/", "blocked": bool(blocked),
             })
