@@ -1,6 +1,6 @@
 ## Functional Replay: site-specific JavaScript + local API (reviewed fixtures)
 
-Use [Functional Replay Mode](gym/FUNCTIONAL_REPLAY.md) to run two
+Generate and run an approved site-specific JavaScript mock in one step with\n`.\\generate-site-mock-windows.bat study-board` or `js-demo`. This works\nwith reviewed first-party sources, not arbitrary URL/phishing recordings.\n\nUse [Functional Replay Mode](gym/FUNCTIONAL_REPLAY.md) to run two
 independent synthetic websites with their own original `app.js`, real DOM
 events, deterministic local API replies and no generic `sim.js`. On Windows:
 `.\\start-functional-gym-windows.bat study-board` or `js-demo`.

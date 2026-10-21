@@ -12,6 +12,36 @@ recording tools. Only explicitly reviewed, packaged first-party sites use
 functional execution. Never add actual credential collection, payment
 submission, imported third-party scripts or a generic API request-body logger.
 
+## One-command site-specific mock generation (approved sources)
+
+`generate-site-mock-windows.bat` automatically packages the original
+**reviewed first-party** site files, produces SHA-256 coverage in
+`mock-manifest.json`, verifies all bytes before serving, and starts
+Functional Replay without generic `sim.js` injection.
+
+```powershell
+# From repo root; close earlier proxies on port 8080 first.
+.\generate-site-mock-windows.bat study-board
+# Or use the separate approved site:
+.\generate-site-mock-windows.bat js-demo
+```
+
+Start the dedicated Chrome profile in another terminal with
+`.\open-chrome-windows.bat`. The builder writes only inside
+`generated-functional/<site>/` and preserves each site's own `app.js`
+**byte for byte**. For a two-command sequence:
+
+```powershell
+.\.venv\Scripts\python.exe -m gym.build_approved_mock --site study-board
+.\start-functional-gym-windows.bat study-board --generated
+```
+
+The source files and local backend schemas still require human review,
+explicit site registration and the in-repository `SITES` allowlist.
+Arbitrary URLs, HAR records, captured phishing scripts or unreviewed
+folders **cannot** be passed to this builder. This is automatic generation
+for *already approved* site sources, not generic URL-to-functional-clone.
+
 ## Windows quick start
 
 Install once (or use the existing .venv):
