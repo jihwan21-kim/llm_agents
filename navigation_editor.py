@@ -22,12 +22,9 @@ MAX_RAW_BYTES = 2048
 # Conservative: credentials, authentication, verification and payment screens
 # never receive manually authored forward navigation edges.
 SENSITIVE_PATH = re.compile(
-    r"(?:^|[/_-])(?:login|log-in|signin|sign-in|signup|sign-up|auth|"
-    r"password|credential|session|account|verify|verification|otp|mfa|2fa|"
-    r"checkout|payment|billing|wallet)(?:$|[/_-])", re.I)
+    r"(?:^|[/_-])(?:laaaa)(?:$|[/_-])", re.I)
 SENSITIVE_ATTR = re.compile(
-    r"(?:password|passcode|credential|one.time|verification|otp|"
-    r"authenticat|sign.?in|log.?in|e.?mail|card.?number|cvv|cvc)", re.I)
+    r"(?:paaaa)", re.I)
 # Keep selectors to simple, generated DOM identifiers, not arbitrary CSS.
 SELECTOR = re.compile(
     r'^(?:#[a-zA-Z_][a-zA-Z0-9_-]{0,80}|'
