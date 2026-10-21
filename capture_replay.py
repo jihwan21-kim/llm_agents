@@ -39,7 +39,9 @@ SIM_JS = r"""
                    {from: step, to: domSettleTo});
       const next = new URL(location.pathname, location.origin);
       next.searchParams.set("__mock_step", String(domSettleTo));
-      location.assign(next.pathname + next.search);
+      // Settling is not a user navigation. Avoid adding spurious entries to
+      // browser history; Back should return to the previous clicked page.
+      location.replace(next.pathname + next.search);
     }, 500);
   }
 
