@@ -45,8 +45,11 @@ class SensitivePageParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.sensitive = False
+        self.heading_depth = 0
 
     def handle_starttag(self, tag, attrs):
+        if tag in {"title", "h1", "h2"}:
+            self.heading_depth += 1
         props = {k.lower(): str(v or "") for k, v in attrs if k}
         if tag == "input":
             kind = props.get("type", "text").lower()
@@ -58,6 +61,17 @@ class SensitivePageParser(HTMLParser):
         if tag == "form":
             if any(SENSITIVE_ATTR.search(props.get(k, "")) for k in ("action", "id", "name")):
                 self.sensitive = True
+
+    def handle_endtag(self, tag):
+        if tag in {"title", "h1", "h2"}:
+            self.heading_depth = max(0, self.heading_depth - 1)
+
+    def handle_data(self, data):
+        # Some authentication steps show a headline before any inputs.
+        if self.heading_depth and re.search(
+                r"\\b(?:log\\s*in|sign\\s*in|password|verify|verification|"
+                r"authentication|payment|checkout)\\b", data, re.I):
+            self.sensitive = True
 
 
 EDITOR_HTML = """<!doctype html>
