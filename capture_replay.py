@@ -46,9 +46,21 @@ SIM_JS = r"""
   }
 
   function bestEdge(el, kind) {
+    // Captured "no-change" on main/body/container was often just a generic
+    // click during recording. Never apply it to *every descendant button*.
+    // It is only valid when the user clicks that exact element/control.
+    const clickedControl = el?.closest?.(
+      "button, a, label, select, input[type=submit], input[type=button], " +
+      "[role=button], [onclick], [tabindex]"
+    ) || null;
     const candidates = edges.filter(e => e.kind === kind).map(edge => ({
       edge, ancestor: matchingAncestor(el, edge)
-    })).filter(item => item.ancestor);
+    })).filter(item => {
+      if (!item.ancestor) return false;
+      if (item.edge.outcome !== "no-change" && item.edge.to !== step)
+        return true;
+      return item.ancestor === el || item.ancestor === clickedControl;
+    });
     candidates.sort((a, b) => {
       const distance = distanceToAncestor(el, a.ancestor)
                      - distanceToAncestor(el, b.ancestor);
@@ -111,13 +123,21 @@ SIM_JS = r"""
     const interactive = target.closest(
       "button, a, input[type=submit], input[type=button], [role=button], [onclick], [tabindex]"
     );
-    if (!candidate && !interactive) return;
+    // Even when we reject a broad no-op match, log the attempted click
+    // as unmatched so researchers can see why nothing navigated.
+    const broadNoop = edges.some(e => e.kind === "click"
+      && (e.outcome === "no-change" || e.to === step)
+      && matchingAncestor(target, e));
+    if (!candidate && !interactive && !broadNoop) return;
     if (interactive && (interactive.matches("a") || interactive.matches("button"))) {
       event.preventDefault();
     }
     if (!candidate) {
-      console.debug("No recorded transition for clicked element. " +
-                    "Inspect bundle.json transitions or recapture this action.");
+      console.warn("[offline mock] No matching observed transition",
+                   {step, tag: target.tagName, id: target.id || "",
+                    available: edges.filter(e => e.kind === "click").map(e => ({
+                      selector: e.selector, to: e.to, outcome: e.outcome
+                    }))});
     }
     record(candidate, "button_click", form || document);
   }, true);
