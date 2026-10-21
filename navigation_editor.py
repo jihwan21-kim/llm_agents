@@ -156,7 +156,7 @@ EDITOR_JS = r"""(() => {
   }
   function stepPath(id) {
     const step = state.steps.find(s => s.id === id);
-    return step ? step.path + "?__mock_step=" + id : "/";
+    return step ? step.path + "?_step=" + id : "/";
   }
   function cssSelector(el, doc) {
     if (el.tagName === "A" && el.hasAttribute("data-mock-link-index")) {
