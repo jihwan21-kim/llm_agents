@@ -56,7 +56,10 @@
       "entry": "/",
       "routes": {
         "/": "index.html",
-        "/activity": "activity.html"
+        "/activity": "activity.html",
+        "/sign": "sign.html",
+        "/sign/complete": "sign-complete.html",
+        "/sign-demo.js": "sign-demo.js"
       }
     }
   ]
