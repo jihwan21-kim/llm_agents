@@ -64,6 +64,57 @@ indicate HTTP navigation or an unsafe subresource, not a missing CA.
 Do not disable certificate verification or click through a Chrome
 certificate warning to mask an experiment failure.
 
+## Manually register multiple local recordings in one inbox
+
+Edit the **Git-tracked** file `mailbox-recordings.json` in the repo root:
+
+```json
+{
+  "recordings": [
+    "recordings/spnetflx",
+    "recordings/phishing-site-1"
+  ]
+}
+```
+
+Add or remove relative paths under `recordings/`. Each entry can refer to
+a recording directory containing `bundle.json`, or a category directory
+whose immediate child folders contain recorded runs. In the second case, the
+most recently modified child run is loaded when the proxy starts. The
+`startUrl` and hostname are taken from that saved `bundle.json`. All
+registered recordings must have **distinct HTTPS hostnames**; missing folders
+are skipped with a terminal warning. Invalid or out-of-tree paths are rejected.
+
+To use the config rather than the one-at-a-time HAR replay, stop any proxy
+currently using port 8080 and run:
+
+```powershell
+cd "C:\\Users\\cliob\\Desktop\\학교\\mock\\llm_agents"
+git pull origin main
+.\\start-mailbox-windows.bat
+```
+
+Open the normal dedicated browser with `.\\open-chrome-windows.bat` and
+visit `https://inbox.cedarpostmail.net/`. Every loaded recording gets its
+own distinguishable **Offline snapshot: hostname** mail. Each **View details**
+link opens that recording's saved start path under the local, offline proxy.
+The four built-in `sites.json` messages also remain visible.
+
+**Important:** Multi-recording inbox mode is for **read-only page inspection**.
+Captured scripts cannot execute, `POST` requests are refused, form actions
+are blocked by CSP, and the server never contacts the original website.
+A recording with zero action transitions (for example, a manually saved
+seven-screen capture) still has zero transitions. This feature does not
+create button-to-screen mappings. For ordinary benign editable navigation,
+use the separate single-recording editor mode.
+
+The manifest stores **folder paths only**, not recordings. The repo's
+`.gitignore` still excludes `recordings/`, so pushing this JSON file does
+not push HTML, screenshots, HARs, auth state, or other captured data. Only
+register recordings from sources you trust and review their stored data
+before distributing them. After editing the manifest, restart the proxy
+to reload it.
+
 ## Normal Windows flow
 
 ```powershell
@@ -106,10 +157,10 @@ directly to that URL rather than launching another profile instance.
 
 - In `start-proxy-windows.bat` mode, the inbox contains entries for the four
   sites already registered in `sites.json`.
-- With `start-har-mock-windows.bat "<recording-folder>"`, it also includes
-  the *single active* recorded origin as one extra message. This is useful for
-  a separately recorded benign counterpart. Use a separate recording for
-  other target origins; this mode does not serve all recordings simultaneously.
+- With `start-har-mock-windows.bat "<recording-folder>"`, it includes
+  just the *single active* recorded origin as one extra message.
+- With `start-mailbox-windows.bat`, the inbox loads **all locally available
+  entries in `mailbox-recordings.json` at once**, as inert snapshots.
 - With `start-functional-gym-windows.bat <site>`, it links only to the
   currently loaded reviewed synthetic fixture. Legacy sites are not served
   in that runtime.
