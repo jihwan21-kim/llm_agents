@@ -8,6 +8,9 @@ on:
       - run_capture_proxy.py
       - record_site.py
       - tests/test_capture_replay.py
+      - tests/test_action_settling.py
+      - automatic_capture.py
+      - navigation_analysis.py
       - .github/workflows/offline-capture-tests.yml
 jobs:
   unit-tests:
@@ -18,4 +21,4 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test sanitized snapshot replay
-        run: python -m unittest discover -s tests -p "test_capture_replay.py" -v
+        run: python -m unittest discover -s tests -p "test_*.py" -v
