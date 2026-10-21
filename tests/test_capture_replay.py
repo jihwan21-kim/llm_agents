@@ -246,6 +246,45 @@ setTimeout(() => {
             self.assertNotIn("token=private", json.dumps(report))
             self.assertNotIn("external.test/steal", json.dumps(report))
 
+    def test_report_explains_zero_literal_routes_and_counts_saved_graph(self):
+        from navigation_analysis import analyze_recording
+        with tempfile.TemporaryDirectory() as tmp:
+            self.make_recording(tmp)
+            folder = Path(tmp)
+            bundle = json.loads((folder / "bundle.json").read_text())
+            bundle["transitions"] = [
+                {"from":0, "to":1, "kind":"click", "outcome":"changed", "observed":True},
+                {"from":0, "to":0, "kind":"click", "outcome":"no-change", "observed":True},
+            ]
+            (folder / "bundle.json").write_text(json.dumps(bundle))
+            # A JavaScript-only interface may have no href or route literals.
+            (folder / "step-000.html").write_text(
+                "<html><body><button>Open modal</button></body></html>"
+            )
+            har = json.loads((folder / "trace.har").read_text())
+            har["log"]["entries"].extend([
+                {"request":{"method":"GET", "url":"https://cdn.test/site.js"},
+                 "response":{"content":{"mimeType":"text/javascript",
+                                        "text":'router.push("/checkout")'}}},
+                {"request":{"method":"GET", "url":"https://example.test/site.js"},
+                 "response":{"content":{"mimeType":"text/javascript",
+                                        "text":"document.body.classList.add('modal')"}}},
+            ])
+            (folder / "trace.har").write_text(json.dumps(har))
+            report = analyze_recording(folder)
+            self.assertEqual(report["html_route_count"], 0)
+            self.assertEqual(report["html_coverage"]["button_tags"], 1)
+            self.assertEqual(report["har_coverage"]["script_entries"], 2)
+            self.assertEqual(report["har_coverage"]["external_scripts"], 1)
+            self.assertEqual(report["har_coverage"]["first_party_scripts"], 1)
+            self.assertEqual(report["har_coverage"]["script_bodies_analyzed"], 2)
+            self.assertEqual(report["js_route_hint_count"], 1)
+            self.assertEqual(report["js_route_hints"][0]["script_origin"], "external")
+            self.assertFalse(report["js_route_hints"][0]["verified"])
+            self.assertEqual(len(report["graph"]["observed_edges"]), 2)
+            self.assertEqual(report["graph"]["reachable_states"], [0, 1])
+            self.assertEqual(report["graph"]["no_change_edge_count"], 1)
+
     def test_static_same_origin_anchor_replay_requires_captured_destination(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.make_recording(tmp)
