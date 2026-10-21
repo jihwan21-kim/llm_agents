@@ -1,4 +1,4 @@
-"""Serve saved mock pages while allowing only the agent control API upstream."""
+"""Serve saved mock pages while allowing explicitly listed agent service hosts upstream."""
 from pathlib import Path
 import json,base64
 from datetime import datetime,timezone
@@ -6,7 +6,7 @@ from mitmproxy import http
 from browser_mail import MAIL_HOST, MAIL_URL, BrowserMailbox, serve_static
 ROOT=Path(__file__).resolve().parent
 HOST='mock.test'
-AGENT_API_HOSTS={'api.openai.com'}
+AGENT_API_HOSTS={'api.openai.com', 'cdn.platform.openai.com'}
 SITES={s['host']:s for s in json.loads((ROOT/'sites.json').read_text(encoding='utf-8'))['sites']}
 class MockProxy:
  def __init__(self):
@@ -39,7 +39,7 @@ class MockProxy:
    f.write(json.dumps(row)+'\n')
  def request(self,flow):
   if flow.request.host.lower() in AGENT_API_HOSTS and flow.request.port==443:
-   return  # Pass through the AI extension's control-plane traffic.
+   return  # Pass through explicitly allowed AI extension service traffic.
   try:self.handle(flow)
   except Exception:
    self.reply(flow,500,b'{"error":"local processing failed; upstream denied"}')
