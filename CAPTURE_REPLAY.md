@@ -134,3 +134,23 @@ use an isolated VM and deny all external network traffic at the VM boundary.
     python -m unittest discover -s tests -p "test_capture_replay.py" -v
 
 See the GitHub Actions check for a repeatable test run.
+
+
+## HTTPS certificate errors during capture
+
+If Playwright prints `ERR_CERT_AUTHORITY_INVALID`, Chrome refused to
+validate the live site's certificate **before recording started**. This is
+not an HAR problem. The recorder now writes `capture_failure.json` and exits
+without storing an invalid capture.
+
+In a disposable research VM, check whether the regular browser also reports
+a certificate warning for that destination. Inspect the certificate issuer,
+subject/hostname and dates without proceeding past the warning. If the issuer
+is a locally configured HTTPS inspection proxy, verify its intended CA is
+properly installed in the dedicated test environment. If the live site's
+certificate itself is invalid, treat it as a security observation and use a
+different authorized capture target or a properly configured local mock.
+
+The recorder deliberately does not set `ignore_https_errors`, disable
+certificate checks or auto-click Chrome's certificate interstitial.
+Those workarounds would hide a security signal from the research experiment.
