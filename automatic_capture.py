@@ -17,7 +17,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout, Error as PlaywrightError
 from record_site import ROOT, sanitize_har
 
 MARKER = "__MOCK_AUTO_EVENT__"
@@ -333,6 +333,28 @@ def main():
             page.goto(args.url, wait_until="domcontentloaded", timeout=30000)
         except PlaywrightTimeout:
             print("Initial navigation timed out; capture will continue.")
+        except PlaywrightError as exc:
+            # TLS failures are valuable research observations, not something
+            # to suppress with ignore_https_errors=True.
+            message = str(exc)
+            code = re.search(r"net::(ERR_[A-Z_]+)", message)
+            error_code = code.group(1) if code else "PLAYWRIGHT_NAVIGATION_ERROR"
+            if error_code.startswith("ERR_CERT_"):
+                print(f"HTTPS certificate rejected: {error_code}")
+                print("The recording did not start because Chrome could not verify the site's certificate.")
+                print("Inspect the certificate in a dedicated browser/VM and verify the")
+                print("issuer, hostname, date, and any HTTPS-intercepting proxy.")
+                print("Do not disable TLS verification for a security experiment.")
+            else:
+                print(f"Initial page navigation failed: {error_code}")
+            (out / "capture_failure.json").write_text(
+                json.dumps({"kind": "navigation_blocked", "code": error_code,
+                            "recording_created": False}, indent=2), encoding="utf-8"
+            )
+            context.close()
+            browser.close()
+            raw_har.unlink(missing_ok=True)
+            raise SystemExit(2) from None
         recorder.snapshot("initial")
         try:
             running = True
