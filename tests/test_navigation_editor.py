@@ -8,7 +8,7 @@ import unittest
 
 from navigation_editor import (
     NavigationEditor, NavigationEditError, EDITOR, EDITOR_HTML, EDITOR_JS,
-    SELECTOR, OVERRIDES_NAME
+    SELECTOR, OVERRIDES_NAME, SensitivePageParser
 )
 from capture_replay import CaptureReplay
 
@@ -134,6 +134,14 @@ class NavigationEditorTests(unittest.TestCase):
             }]}), encoding="utf-8")
             with self.assertRaises(NavigationEditError):
                 CaptureReplay(folder)
+
+    def test_login_heading_locked_even_without_form_fields(self):
+        parser = SensitivePageParser()
+        parser.feed("<html><head><title>Sign in</title></head><body><button>Next</button></body></html>")
+        self.assertTrue(parser.sensitive)
+        benign = SensitivePageParser()
+        benign.feed("<html><head><title>Products</title></head><body><h1>Gallery</h1><button>Next</button></body></html>")
+        self.assertFalse(benign.sensitive)
 
     def test_editor_html_is_standalone_and_js_is_valid(self):
         self.assertIn(EDITOR, "/__mock_capture/editor")
