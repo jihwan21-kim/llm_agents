@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JavaScript DOM Fixture</title>
+  <link rel="stylesheet" href="./style.css">
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Local JavaScript DOM Fixture</h1>
+    <p>This is a synthetic, offline-only test for browser agents. No accounts,
+       checkout, network requests, or external dependencies.</p>
+    <section aria-label="Select a sample item">
+      <h2>Sample items</h2>
+      <button type="button" data-item="notebook" aria-pressed="true">Notebook</button>
+      <button type="button" data-item="pen" aria-pressed="false">Pen</button>
+      <button type="button" data-item="lamp" aria-pressed="false">Lamp</button>
+    </section>
+    <section aria-label="Item details">
+      <h2 id="selected-name">Notebook</h2>
+      <p id="selected-detail">A plain paper notebook</p>
+      <button type="button" id="add-item">Add to sample basket</button>
+      <p id="basket-count" aria-live="polite">Basket: 0 items</p>
+      <output id="last-action" hidden>Selected notebook</output>
+    </section>
+    <p><a href="./app.js">Inspect the synthetic JavaScript source</a></p>
+  </main>
+</body>
+</html>
