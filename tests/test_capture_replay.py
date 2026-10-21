@@ -50,6 +50,13 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(replay.respond("GET", "/a/b", "__mock_step=999")[0], 404)
 
 
+    def test_recorder_and_proxy_have_valid_python_syntax(self):
+        root = Path(__file__).resolve().parents[1]
+        for script in ("automatic_capture.py", "record_site.py",
+                       "run_capture_proxy.py", "capture_replay.py"):
+            source = (root / script).read_text(encoding="utf-8")
+            compile(source, script, "exec")
+
     def test_recorded_branches_not_arbitrary_next_step(self):
         with tempfile.TemporaryDirectory() as t:
             self.make_recording(t)
