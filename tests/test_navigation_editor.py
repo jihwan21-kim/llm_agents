@@ -151,12 +151,22 @@ class NavigationEditorTests(unittest.TestCase):
         self.assertIn('src="/__mock_capture/editor.js"', EDITOR_HTML)
         # Locked states are visible only as inert, read-only recordings.
         self.assertIn('sandbox="allow-same-origin"', EDITOR_HTML)
-        self.assertIn('fill(sourceSelect, state.steps, true)', EDITOR_JS)
-        self.assertIn('option.disabled = s.blocked && !allowReadOnly', EDITOR_JS)
+        # Both pickers can select any recorded screen for read-only viewing.
+        self.assertIn('fill(sourceSelect, state.steps)', EDITOR_JS)
+        self.assertIn('fill(targetSelect, state.steps)', EDITOR_JS)
+        self.assertNotIn('option.disabled = s.blocked', EDITOR_JS)
         self.assertIn('preview.style.pointerEvents = readOnly ? "none" : "auto"', EDITOR_JS)
         self.assertIn('preview.src = stepPath(id)', EDITOR_JS)
-        self.assertIn('if (!current || current.blocked || !destination || destination.blocked)', EDITOR_JS)
-        self.assertIn('$("save").disabled = readOnly', EDITOR_JS)
+        self.assertIn('$(\"save\").disabled = !canEdit', EDITOR_JS)
+        # Auth/payment screen navigation writes remain forbidden in UI and backend.
+        self.assertIn('current.blocked || !destination || destination.blocked', EDITOR_JS)
+        self.assertIn('self.states[a]["blocked"] or self.states[b]["blocked"]', (Path(__file__).resolve().parents[1] / "navigation_editor.py").read_text(encoding="utf-8"))
+        # Snapshot slideshow cannot execute scripts or write navigation overrides.
+        self.assertIn('id="previousRecorded"', EDITOR_HTML)
+        self.assertIn('id="nextRecorded"', EDITOR_HTML)
+        self.assertIn('loadPreview(next, true)', EDITOR_JS)
+        self.assertIn('loadPreview(to, true)', EDITOR_JS)
+        self.assertNotIn('window.open(stepPath(to)', EDITOR_JS)
 
         self.assertIn("stopImmediatePropagation", EDITOR_JS)
         node = shutil.which("node")
