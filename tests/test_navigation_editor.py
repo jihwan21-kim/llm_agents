@@ -172,6 +172,11 @@ class NavigationEditorTests(unittest.TestCase):
         # submitted or converted into a replay navigation edge.
         self.assertIn('const inForm = !!target.closest("form")', EDITOR_JS)
         self.assertIn('selectedIsFormControl = inForm', EDITOR_JS)
+        # Accidental unconditional overrides must not disable sensitive locks.
+        editor_source = (Path(__file__).resolve().parents[1] /
+                         "navigation_editor.py").read_text(encoding="utf-8")
+        self.assertNotIn("        self.sensitive = False\\n\\n    def handle_endtag", editor_source)
+        self.assertNotIn("            blocked = False", editor_source)
         self.assertIn('!selectedIsFormControl;', EDITOR_JS)
         self.assertIn('selectedIsFormControl || previewOnly', EDITOR_JS)
         self.assertIn('event.preventDefault()', EDITOR_JS)
