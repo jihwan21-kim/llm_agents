@@ -3,8 +3,10 @@ import argparse
 import asyncio
 from datetime import datetime, timezone
 import json
+from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlsplit
+import re
+from urllib.parse import parse_qs, urlsplit
 
 from mitmproxy import http
 from mitmproxy.options import Options
@@ -12,7 +14,8 @@ from mitmproxy.tools.dump import DumpMaster
 
 from capture_replay import CaptureReplay, SCRIPT_INDEX
 from navigation_editor import (NavigationEditError, EDITOR, EDITOR_JS_PATH,
-                               EDITOR_STATE, EDITOR_SAVE, EDITOR_HTML, EDITOR_JS)
+                               EDITOR_STATE, EDITOR_SAVE, EDITOR_HTML, EDITOR_JS,
+                               SENSITIVE_PATH, SENSITIVE_ATTR)
 from gym.fixture_receipt import parse_fixture_receipt, FixtureReceiptError
 from proxy_app import MockProxy, SITES
 from browser_mail import BrowserMailbox, MAIL_URL
@@ -265,12 +268,48 @@ class RecordedMockProxy(MockProxy):
         return self._respond(flow, status, body, mime)
 
 
-class ConfiguredMailboxProxy(MockProxy):
-    """Serve all explicitly listed local snapshots as inert offline mail links.
+class _BenignPageParser(HTMLParser):
+    """Only permit ordinary recorded button clicks on non-form UI screens."""
 
-    Captured script and submit behavior are intentionally not executable in
-    this mode. Each recorded origin has its own CaptureReplay, while the inbox
-    continues to be handled by MockProxy using server-side link destinations.
+    def __init__(self):
+        super().__init__()
+        self.sensitive = False
+        self.heading_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"title", "h1", "h2"}:
+            self.heading_depth += 1
+        attrs = {key.lower(): str(value or "") for key, value in attrs if key}
+        # A form can submit credentials, an OTP, or other entered data. It
+        # remains inert even when its button looks visually ordinary.
+        if tag in {"form", "textarea", "select"}:
+            self.sensitive = True
+        if tag == "input":
+            kind = attrs.get("type", "text").lower()
+            if kind not in {"hidden", "button", "submit", "reset",
+                            "checkbox", "radio", "search"}:
+                self.sensitive = True
+            if any(SENSITIVE_ATTR.search(attrs.get(name, "")) for name in
+                   ("type", "name", "id", "placeholder", "autocomplete", "aria-label")):
+                self.sensitive = True
+
+    def handle_endtag(self, tag):
+        if tag in {"title", "h1", "h2"}:
+            self.heading_depth = max(0, self.heading_depth - 1)
+
+    def handle_data(self, data):
+        if self.heading_depth and re.search(
+                r"\\b(?:log\\s*in|sign\\s*in|password|otp|verify|verification|"
+                r"authentication|payment|checkout)\\b", data, re.I):
+            self.sensitive = True
+
+
+class ConfiguredMailboxProxy(MockProxy):
+    """Serve registered offline recordings together in a local-only inbox.
+
+    The existing simulator may replay verified non-form, non-sensitive button
+    transitions. Original captured scripts and all actual form submissions are
+    still disabled. Each host keeps an independent recorded state graph.
     """
 
     INERT_CSP = (
@@ -280,10 +319,13 @@ class ConfiguredMailboxProxy(MockProxy):
         "frame-src 'none'; object-src 'none'; base-uri 'none'; "
         "frame-ancestors 'none'"
     )
+    REPLAY_CSP = INERT_CSP.replace("script-src 'none'", "script-src 'self'").replace(
+        "connect-src 'none'", "connect-src 'self'")
 
     def __init__(self, config_path):
         super().__init__()
         self.captures = {}
+        self.benign_steps = {}
         for folder in load_recording_directories(config_path):
             capture = CaptureReplay(folder)
             scheme = urlsplit(capture.start_url).scheme
@@ -294,6 +336,20 @@ class ConfiguredMailboxProxy(MockProxy):
             if capture.host in self.captures:
                 raise ValueError(f"Two recordings use the same host: {capture.host}")
             self.captures[capture.host] = capture
+            safe = set()
+            for index, step in enumerate(capture.steps):
+                step_url = urlsplit(step.get("url") or capture.start_url)
+                if (step_url.hostname != capture.host or
+                        SENSITIVE_PATH.search(step_url.path)):
+                    continue
+                filename = step.get("html") or f"step-{index:03d}.html"
+                raw = (capture.directory / filename).read_text(
+                    encoding="utf-8", errors="replace")
+                parser = _BenignPageParser()
+                parser.feed(raw)
+                if not parser.sensitive:
+                    safe.add(index)
+            self.benign_steps[capture.host] = safe
         if not self.captures:
             raise ValueError("No local recording could be loaded from mailbox config")
         self.mailbox = BrowserMailbox([
@@ -307,7 +363,81 @@ class ConfiguredMailboxProxy(MockProxy):
         ])
         for capture in self.captures.values():
             print(f"Mailbox recording: {capture.host} from {capture.directory} "
-                  f"({len(capture.steps)} screens, read-only)", flush=True)
+                  f"({len(capture.steps)} screens, "
+                  f"{len(self.benign_steps[capture.host])} non-form states eligible "
+                  "for recorded button navigation)", flush=True)
+
+    def _displayed_step(self, capture, path, query):
+        requested = parse_qs(query).get("_step")
+        if requested is not None:
+            if len(requested) != 1 or not requested[0].isdecimal():
+                return None
+            index = int(requested[0])
+        elif path == (urlsplit(capture.start_url).path or "/"):
+            index = capture.initial_step
+        else:
+            index = next((i for i, st in enumerate(capture.steps)
+                          if (urlsplit(st.get("url") or capture.start_url).path
+                              or "/") == path), None)
+        if index is None or index >= len(capture.steps):
+            return None
+        step_url = urlsplit(capture.steps[index].get("url") or capture.start_url)
+        return index if (step_url.hostname == capture.host and
+                         (step_url.path or "/") == path) else None
+
+    def _replay_click(self, flow, capture):
+        request = flow.request
+        if request.method != "POST":
+            return self.reply(flow, 405, b"Method not allowed", "text/plain")
+        if (request.headers.get("Origin") != "https://" + capture.host or
+                request.headers.get("Content-Type", "").split(";", 1)[0].lower()
+                != "application/json"):
+            return self.reply(flow, 403, b"Local event refused", "text/plain")
+        raw = request.raw_content or b""
+        if not 1 <= len(raw) <= 1024:
+            return self.reply(flow, 413, b"Invalid event length", "text/plain")
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            source = data.get("step")
+            dest = data.get("to")
+            selector = data.get("selector")
+            if (not isinstance(data, dict) or data.get("kind") != "button_click"
+                    or type(source) is not int or type(dest) is not int
+                    or source == dest or source not in self.benign_steps[capture.host]
+                    or dest not in self.benign_steps[capture.host]
+                    or not isinstance(selector, str) or not 1 <= len(selector) <= 256
+                    or data.get("filled_types") != []):
+                raise ValueError("Non-form recorded click required")
+        except (ValueError, TypeError, UnicodeDecodeError, AttributeError):
+            return self.reply(flow, 400, b"Non-form recorded click required", "text/plain")
+        # Never trust the JS-supplied destination or observed flag: independently
+        # match an observed click, a unique static anchor, or a saved benign edge.
+        observed = any(
+            edge.get("from") == source and edge.get("to") == dest and
+            edge.get("selector") == selector and edge.get("kind") == "click" and
+            edge.get("outcome") == "changed" and edge.get("observed") is True
+            for edge in capture.transitions
+        )
+        static_navigation = any(
+            edge["from"] == source and edge["to"] == dest and
+            edge["selector"] == selector and edge["kind"] == "click" and
+            edge["outcome"] == "html-href"
+            for edge in capture.inferred_edges
+        )
+        manual_navigation = any(
+            edge["from"] == source and edge["to"] == dest and
+            edge["selector"] == selector
+            for edge in capture.manual_edges
+        )
+        allowed = observed or static_navigation or manual_navigation
+        response = {
+            "recorded": True, "observed": observed,
+            "static_navigation": static_navigation,
+            "manual_navigation": manual_navigation,
+            "to": dest if allowed else source
+        }
+        return self.reply(flow, 200, json.dumps(response).encode(),
+                          "application/json; charset=utf-8")
 
     def handle(self, flow):
         request = flow.request
@@ -315,23 +445,26 @@ class ConfiguredMailboxProxy(MockProxy):
         if capture is None:
             return super().handle(flow)
         path = urlsplit(request.path).path
-        # No third-party original JS, form posting, synthetic event posting, or
-        # upstream requests are available from configured recordings.
         if (request.port not in {80, 443} or request.headers.get("Upgrade")
                 or request.headers.get("Origin") not in {
                     None, "http://" + capture.host, "https://" + capture.host
                 }):
             return self.reply(flow, 403, b"Offline mock request blocked", "text/plain")
+        if path == "/__mock_capture/event":
+            return self._replay_click(flow, capture)
+        # No external HTTP writes, original captured JS, or credential receipt.
         if request.method not in {"GET", "HEAD"}:
             return self.reply(flow, 405, b"Read-only recording", "text/plain")
         query = urlsplit(request.path).query
         status, body, mime = capture.respond(request.method, path, query)
         self.reply(flow, status, body, mime)
-        # Disallow the replay's event shim too: this mode is snapshot browsing,
-        # not functional credential/OTP submission. No script runs in page.
-        flow.response.headers["Content-Security-Policy"] = self.INERT_CSP
+        index = self._displayed_step(capture, path, query)
+        # Only non-form states can execute our own offline simulator script.
+        # Captured original site scripts are stripped by CaptureReplay.
+        csp = (self.REPLAY_CSP if index in self.benign_steps[capture.host]
+               else self.INERT_CSP)
+        flow.response.headers["Content-Security-Policy"] = csp
         flow.response.headers["X-Mock-Proxy"] = "offline-static-no-upstream"
-
 
 async def run(directory=None, preview_dom_settling=False, trusted_fixture_js=False,
               agent_js_inspection=False, edit_navigation=False,
@@ -367,7 +500,7 @@ async def run(directory=None, preview_dom_settling=False, trusted_fixture_js=Fal
                   "(benign screens only; persisted local overrides)", flush=True)
         print("Synthetic events: http://mock.test/__mock_capture/events", flush=True)
     else:
-        print("Configured recordings are read-only. No page scripts or form submit.", flush=True)
+        print("Configured recordings: recorded benign button clicks only; no form submission or captured JS.", flush=True)
     print("Browser inbox:", MAIL_URL, flush=True)
     print("Mailbox click metadata: http://mock.test/__mock/mail-events", flush=True)
     await master.run()
