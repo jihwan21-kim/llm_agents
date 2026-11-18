@@ -69,6 +69,22 @@ GOOGLE_SIGNIN_REQUESTS = (
     ("GET", "https://accounts.google.com/RotateBoundCookies"),
 )
 
+LOGIN_SUPPORT_REQUESTS = (
+    ("POST", "https://optimizationguide-pa.googleapis.com/v1:GetModels?key=synthetic-key"),
+    ("GET", "https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off"),
+    ("GET", "https://lh3.googleusercontent.com/a/synthetic-avatar=s256"),
+    ("GET", "https://accounts.youtube.com/accounts/CheckConnection?pmpo=https%3A%2F%2Faccounts.google.com"),
+    ("POST", "https://play.google.com/log?format=json&auth=synthetic-auth"),
+    ("GET", "https://www.google.com/favicon.ico"),
+    ("GET", "https://accounts.google.co.kr/accounts/SetSID?sidt=synthetic-session"),
+    ("OPTIONS", "https://csp.withgoogle.com/csp/report-to/AccountsSignInUi"),
+    ("POST", "https://csp.withgoogle.com/csp/report-to/AccountsSignInUi"),
+    ("GET", "https://chromesyncpreview.pa.googleapis.com/v1/dataTypes/-/dataTypesStatistics?dataTypes=45873"),
+    ("GET", "https://chromesyncpreview.pa.googleapis.com/v1/dataTypes/154522/entitiesPreviews"),
+    ("POST", "https://accountcapabilities-pa.googleapis.com/v1/accountcapabilities:batchGet"),
+    ("GET", "https://content-autofill.googleapis.com/v1/pages/synthetic-page-key"),
+)
+
 
 class ProxyEgressTests(unittest.TestCase):
     @classmethod
@@ -89,13 +105,16 @@ class ProxyEgressTests(unittest.TestCase):
         }):
             import proxy_app
             import run_capture_proxy
+            import run_functional_gym
         cls.proxy_app = proxy_app
         cls.recording_proxy = run_capture_proxy
+        cls.functional_proxy = run_functional_gym
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.proxy = self.proxy_app.MockProxy()
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.proxy = self.proxy_app.MockProxy()
         self.proxy.logfile = Path(self.tmp.name) / "requests.jsonl"
 
     def connect(self, proxy, host, port=443):
@@ -167,6 +186,124 @@ class ProxyEgressTests(unittest.TestCase):
                     flow = flow_for(url, method, {header: "https://298101binance.com/"})
                     self.proxy.request(flow)
                     self.assertEqual(flow.response.status_code, 403)
+
+    def test_all_remaining_login_support_requests_are_forwarded(self):
+        for method, url in LOGIN_SUPPORT_REQUESTS:
+            with self.subTest(method=method, url=url):
+                flow = flow_for(url, method)
+                self.proxy.request(flow)
+                self.assertIsNone(flow.response)
+                self.assertIsNone(self.connect(self.proxy, flow.request.host))
+        self.assertFalse(self.proxy.logfile.exists())
+
+    def test_hcaptcha_dynamic_assets_and_api_preserve_real_requests(self):
+        for method, url in (
+            ("GET", "https://hcaptcha.com/"),
+            ("GET", "https://newassets.hcaptcha.com/captcha/v1/synthetic/widget.html"),
+            ("HEAD", "https://regional-assets.hcaptcha.com/style.css"),
+            ("POST", "https://api.hcaptcha.com/checksiteconfig"),
+            ("POST", "https://api.hcaptcha.com/getcaptcha/synthetic-site-key"),
+            ("OPTIONS", "https://api.hcaptcha.com/getcaptcha/synthetic-site-key"),
+        ):
+            with self.subTest(method=method, url=url):
+                flow = flow_for(url, method, {"Origin": "https://claude.ai"})
+                body = flow.request.raw_content
+                self.proxy.request(flow)
+                self.assertIsNone(flow.response)
+                self.assertEqual(flow.request.raw_content, body)
+                self.assertIsNone(self.connect(self.proxy, flow.request.host))
+        self.assertFalse(self.proxy.logfile.exists())
+
+    def test_new_support_exceptions_do_not_allow_unrelated_paths_or_writes(self):
+        for method, url in (
+            ("POST", "https://optimizationguide-pa.googleapis.com/v1:Other"),
+            ("POST", "https://accountcapabilities-pa.googleapis.com/v1/other"),
+            ("POST", "https://play.google.com/"),
+            ("GET", "https://accounts.youtube.com/"),
+            ("GET", "https://accounts.google.co.kr/"),
+            ("GET", "https://content-autofill.googleapis.com/v1/other"),
+            ("GET", "https://chromesyncpreview.pa.googleapis.com/v1/other"),
+            ("POST", "https://lh3.googleusercontent.com/a/synthetic-avatar"),
+            ("DELETE", "https://api.hcaptcha.com/checksiteconfig"),
+            ("GET", "https://csp.withgoogle.com/csp/report-to/AccountsSignInUi"),
+            ("GET", "https://accounts.youtube.com/accounts/../private"),
+            ("GET", "https://accounts.youtube.com/accounts/%2e%2e/private"),
+        ):
+            with self.subTest(method=method, url=url):
+                flow = flow_for(url, method)
+                self.proxy.request(flow)
+                self.assertEqual(flow.response.status_code, 403)
+
+    def test_new_service_hostname_lookalikes_and_insecure_ports_remain_blocked(self):
+        for url in (
+            "https://js.hcaptcha.com.attacker.test/1/api.js",
+            "https://not-hcaptcha.com/1/api.js",
+            "https://lh3.googleusercontent.com.attacker.test/a/image",
+            "https://accounts.google.co.kr.attacker.test/accounts/SetSID",
+            "https://accounts.youtube.com.attacker.test/accounts/CheckConnection",
+            "http://js.hcaptcha.com/1/api.js",
+            "https://js.hcaptcha.com:8443/1/api.js",
+        ):
+            with self.subTest(url=url):
+                flow = flow_for(url)
+                self.proxy.request(flow)
+                self.assertEqual(flow.response.status_code, 403)
+                self.assertIsNotNone(self.connect(self.proxy, flow.request.host, flow.request.port))
+
+    def test_mock_pages_cannot_send_to_any_new_support_exception(self):
+        for method, url in LOGIN_SUPPORT_REQUESTS:
+            for header in ("Origin", "Referer"):
+                with self.subTest(method=method, url=url, header=header):
+                    flow = flow_for(url, method, {header: "https://298101binance.com/"})
+                    self.proxy.request(flow)
+                    self.assertEqual(flow.response.status_code, 403)
+
+    def test_status_reports_live_policy_and_sanitized_blocked_host_counts(self):
+        flow = flow_for("https://outside.invalid/private-path?token=private-query", "POST", {
+            "Authorization": "Bearer private-header", "Cookie": "private-cookie"})
+        flow.request.raw_content = b"private-body"
+        self.proxy.request(flow)
+        self.proxy.request(flow)
+        status = flow_for("http://mock.test/__mock/proxy-status")
+        self.proxy.request(status)
+        self.assertEqual(status.response.status_code, 200)
+        data = json.loads(status.response.content)
+        self.assertEqual(data["policy_revision"], "2026-11-18.4")
+        self.assertEqual(data["mode"], "MockProxy")
+        self.assertEqual(data["code_directory"], str(Path(__file__).resolve().parents[1]))
+        self.assertEqual(len(data["blocked_service_requests"]), 1)
+        entry = data["blocked_service_requests"][0]
+        self.assertEqual(entry["host"], "outside.invalid")
+        self.assertEqual(entry["reason"], "unlisted_host")
+        self.assertEqual(entry["count"], 2)
+        saved = self.proxy.logfile.read_text(encoding="utf-8")
+        for secret in ("private-path", "private-query", "private-header", "private-cookie", "private-body"):
+            self.assertNotIn(secret, saved)
+            self.assertNotIn(secret, status.response.content.decode())
+
+    def test_status_endpoint_is_read_only_and_rejects_other_origins(self):
+        post = flow_for("http://mock.test/__mock/proxy-status", "POST")
+        self.proxy.request(post)
+        self.assertEqual(post.response.status_code, 405)
+        head = flow_for("http://mock.test/__mock/proxy-status", "HEAD")
+        self.proxy.request(head)
+        self.assertEqual(head.response.status_code, 200)
+        self.assertEqual(head.response.content, b"")
+        for origin in ("https://298101binance.com", "https://claude.ai"):
+            flow = flow_for("http://mock.test/__mock/proxy-status", headers={"Origin": origin})
+            self.proxy.request(flow)
+            self.assertEqual(flow.response.status_code, 403)
+
+    def test_status_endpoint_is_available_in_functional_mode(self):
+        proxy = self.functional_proxy.FunctionalGymProxy.__new__(self.functional_proxy.FunctionalGymProxy)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.proxy_app.MockProxy.__init__(proxy)
+        proxy.site = types.SimpleNamespace(host="fixture.test", name="synthetic-fixture")
+        proxy.logfile = Path(self.tmp.name) / "functional.jsonl"
+        flow = flow_for("http://mock.test/__mock/proxy-status")
+        proxy.request(flow)
+        self.assertEqual(flow.response.status_code, 200)
+        self.assertEqual(json.loads(flow.response.content)["mode"], "FunctionalGymProxy")
 
     def test_allowed_hosts_do_not_allow_unrelated_paths_or_writes(self):
         cases = (
@@ -264,6 +401,10 @@ class ProxyEgressTests(unittest.TestCase):
         self.assertEqual(flow.response.status_code, 200)
         self.assertIn(b"LOCAL_REPLAY_MARKER", flow.response.content)
         self.assertIsNotNone(self.connect(proxy, host))
+        status = flow_for("http://mock.test/__mock/proxy-status")
+        proxy.request(status)
+        self.assertEqual(status.response.status_code, 200)
+        self.assertEqual(json.loads(status.response.content)["policy_revision"], "2026-11-18.4")
         proxy.handle = mock.Mock()
         flow = flow_for(OBSERVED_REQUESTS[2][1], "POST", {"Origin": "https://" + host})
         proxy.request(flow)
@@ -275,7 +416,10 @@ class ProxyEgressTests(unittest.TestCase):
                            ("chatgpt.com", "/api/auth/session"),
                            ("update.googleapis.com", "/service/update2/json"),
                            ("google.com", "/.well-known/device-bound-sessions"),
-                           ("oauthaccountmanager.googleapis.com", "/v1/issuetoken")):
+                           ("oauthaccountmanager.googleapis.com", "/v1/issuetoken"),
+                           ("js.hcaptcha.com", "/1/api.js"),
+                           ("lh3.googleusercontent.com", "/a/synthetic-avatar"),
+                           ("accounts.google.co.kr", "/accounts/SetSID")):
             with self.subTest(host=host), contextlib.redirect_stdout(io.StringIO()):
                 folder = self.make_recording(host, path)
                 proxy = self.recording_proxy.RecordedMockProxy(folder)
@@ -287,7 +431,10 @@ class ProxyEgressTests(unittest.TestCase):
                            ("chatgpt.com", "/api/auth/session"),
                            ("update.googleapis.com", "/service/update2/json"),
                            ("google.com", "/.well-known/device-bound-sessions"),
-                           ("oauthaccountmanager.googleapis.com", "/v1/issuetoken")):
+                           ("oauthaccountmanager.googleapis.com", "/v1/issuetoken"),
+                           ("js.hcaptcha.com", "/1/api.js"),
+                           ("lh3.googleusercontent.com", "/a/synthetic-avatar"),
+                           ("accounts.google.co.kr", "/accounts/SetSID")):
             with self.subTest(host=host), contextlib.redirect_stdout(io.StringIO()):
                 folder = self.make_recording(host, path)
                 with mock.patch.object(self.recording_proxy, "load_recording_directories",

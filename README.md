@@ -8,12 +8,21 @@ over HTTPS on port 443, with their real upstream responses:
 | Host | Path | Methods |
 | --- | --- | --- |
 | `www.google.com` | `/async/folae` | GET, HEAD |
+| `www.google.com` | `/favicon.ico` | GET, HEAD |
 | `oauthaccountmanager.googleapis.com` | `/v1/issuetoken`, `/v1/upgradetoken` | POST, OPTIONS |
 | `google.com`, `www.google.com` | `/.well-known/device-bound-sessions` | GET, HEAD |
+| `optimizationguide-pa.googleapis.com` | `/v1:GetModels` | POST, OPTIONS |
+| `accountcapabilities-pa.googleapis.com` | `/v1/accountcapabilities:batchGet` | POST, OPTIONS |
+| `play.google.com` | `/log` | POST, OPTIONS |
 | `update.googleapis.com` | `/service/update2/json` | POST, OPTIONS |
 | `ab.chatgpt.com` | `/v1/rgstr`, `/v1/sdk_exception` | POST, OPTIONS |
 | `o33249.ingest.us.sentry.io` | `/api/4512228274601984/envelope/` | POST, OPTIONS |
-| `csp.withgoogle.com` | `/csp/report-to/gse_qebhlk` | POST, OPTIONS |
+| `csp.withgoogle.com` | `/csp/report-to/` followed by an application name | POST, OPTIONS |
+| `accounts.google.co.kr`, `accounts.youtube.com` | `/accounts/` followed by a connection/session path | GET, HEAD, OPTIONS |
+| `chromesyncpreview.pa.googleapis.com` | `/v1/dataTypes/` followed by a data-type route | GET, HEAD, OPTIONS |
+| `content-autofill.googleapis.com` | `/v1/pages/` followed by an encoded page key | GET, HEAD, OPTIONS |
+| `lh3.googleusercontent.com` | Profile image resources | GET, HEAD |
+| `hcaptcha.com` and its subdomains | Challenge scripts, frames, assets and APIs | GET, HEAD, POST, OPTIONS |
 | `browser-intake-us5-datadoghq.com` | `/api/v2/rum` | POST, OPTIONS |
 | `beacons.gcp.gvt2.com`, `beacons3.gvt2.com`, `beacons4.gvt2.com`, `beacons5.gvt2.com`, `beacons5.gvt3.com`, `clients2.google.com` | `/domainreliability/upload` | POST, OPTIONS |
 
@@ -21,6 +30,13 @@ This does not allow general Google browsing or every subdomain. The proxy
 does not manufacture successful telemetry responses. `claude.ai` remains in
 the existing agent-service list; a 200 from its event logging endpoint is
 already a successful request, not a proxy failure.
+
+The hCaptcha exception matches only `hcaptcha.com` and DNS-label-boundary
+subdomains, not lookalike hostnames. This follows the vendor's
+[documented changing asset hosts](https://docs.hcaptcha.com/#content-security-policy-settings).
+Requests and real responses are forwarded unchanged; no challenge response
+or authentication success is synthesized. Registered recordings of these
+hosts still take precedence over all live-service rules.
 
 Google sign-in also calls the separate OAuth account-manager host and the
 device-bound session discovery URL above. Allowing `accounts.google.com`
@@ -34,7 +50,33 @@ Built-in mock hosts, the inbox, the manager, and active recording/fixture
 hosts always take precedence over live service exceptions. Calls carrying a
 mock origin or referrer are also kept off the live services. Other external
 hosts, paths and ports remain blocked. Forwarded service bodies, cookies and
-tokens are not copied into the mock's JSONL request logs.
+tokens are not copied into the mock's JSONL request logs. Blocked external
+service requests now save only host, method, time and reason, with no URL
+path/query, request body, authentication header or cookie.
+
+### Verify the running proxy, not just the checked-out files
+
+This network policy revision is **`2026-11-18.4`**. It is printed together with
+the code directory when any mock proxy starts. In the dedicated proxy Chrome,
+open:
+
+```text
+http://mock.test/__mock/proxy-status
+```
+
+The read-only manager endpoint returns `policy_revision`, `mode`,
+`code_directory`, and `blocked_service_requests`. Each blocked-service entry
+has host, method, reason, count and last-seen time. Up to 100 distinct entries
+are retained in memory and reset when the proxy restarts. It excludes query
+strings, dynamic paths, headers and bodies. Mock-origin pages cannot read it.
+It is available in the built-in, single-recording, multi-recording and
+functional runners.
+
+An unknown/old revision or a 403/404 at this URL means the expected new code
+is not serving that request. An empty blocked-service list means this proxy
+has not rejected a real-service request since it restarted; it does not
+establish that the remote service accepted a login or CAPTCHA. Real upstream
+401/403 responses are never changed into success.
 
 After `git pull origin main`, stop the old proxy with Ctrl+C and restart your
 usual launcher (`start-mailbox-windows.bat` for the multi-recording inbox, or

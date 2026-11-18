@@ -42,7 +42,7 @@ class FunctionalGymProxy(MockProxy):
         print("Functional JS gym:", self.site.url, flush=True)
         print("Site-specific JavaScript loaded at /app.js; no generic sim.js",
               flush=True)
-        print("All upstream connections denied; local metadata-only APIs",
+        print("Fixture APIs stay local; explicitly listed browser services may connect upstream",
               flush=True)
 
     def respond(self, flow, status, body=b"", mime="application/json; charset=utf-8"):
@@ -79,7 +79,7 @@ class FunctionalGymProxy(MockProxy):
             return super().handle(flow)
 
         if request.host == "mock.test":
-            if path == "/__mock/mail-events":
+            if path in {"/__mock/mail-events", "/__mock/proxy-status"}:
                 return super().handle(flow)
             if method != "GET":
                 self.log_metadata(method, path, "manager_denied", 405)
@@ -149,3 +149,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
