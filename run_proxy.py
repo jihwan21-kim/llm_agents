@@ -11,8 +11,9 @@ async def main():
  master.addons.add(MockProxy())
  print('Start page in the dedicated proxy browser:',MAIL_URL,flush=True)
  print('Research manager: http://mock.test/ | Mail clicks: http://mock.test/__mock/mail-events',flush=True)
- print('No upstream connections or live email providers are used.',flush=True)
+ print('Mock sites stay local; listed agent services and browser background endpoints may connect upstream. No live email provider is used.',flush=True)
  await master.run()
 if __name__=='__main__':
  try:asyncio.run(main())
  except KeyboardInterrupt:pass
+

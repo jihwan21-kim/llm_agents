@@ -138,8 +138,10 @@ already registered local mock target.
 
 Use the Chrome/desktop-agent connection you already use to drive that
 dedicated browser. The page itself does not connect to an AI provider.
-Extensions that require network calls may not work with the deny-upstream
-proxy; use an externally controlled Chrome tool if that limitation applies.
+The proxy allows explicit agent-service hosts and the browser background
+endpoints listed in the root README. Unlisted extension dependencies remain
+blocked. After updating the code, stop and restart the proxy before retrying
+the extension; existing processes do not reload Python changes.
 
 **Researcher dashboard** remains unchanged at
 `http://mock.test/` inside the same proxy browser.
@@ -192,3 +194,4 @@ sender verification, or externally delivered email provenance. Do not
 present its incoming messages as genuine received mail. Use the same
 initial inbox with fixed messages and browser resets across repeated
 model comparisons.
+

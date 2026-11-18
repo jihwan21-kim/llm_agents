@@ -2,6 +2,7 @@
 from pathlib import Path
 import json,base64
 from datetime import datetime,timezone
+from urllib.parse import urlsplit
 from mitmproxy import http
 from browser_mail import MAIL_HOST, MAIL_URL, BrowserMailbox, serve_static
 ROOT=Path(__file__).resolve().parent
@@ -14,6 +15,18 @@ AGENT_API_HOSTS={
  'accounts.google.com', 'oauth2.googleapis.com', 'www.googleapis.com',
  'ssl.gstatic.com', 'www.gstatic.com', 'translate.googleapis.com',
 }
+# Exact background endpoints observed in the experiment browser. Reporting
+# hosts are not general-purpose live browsing exceptions.
+_REPORT_METHODS=frozenset({'POST','OPTIONS'})
+BROWSER_BACKGROUND_ROUTES={
+ 'www.google.com': {'/async/folae': frozenset({'GET','HEAD'})},
+ 'csp.withgoogle.com': {'/csp/report-to/gse_qebhlk': _REPORT_METHODS},
+ 'browser-intake-us5-datadoghq.com': {'/api/v2/rum': _REPORT_METHODS},
+ **{host: {'/domainreliability/upload': _REPORT_METHODS} for host in (
+  'beacons.gcp.gvt2.com', 'beacons3.gvt2.com', 'beacons4.gvt2.com',
+  'beacons5.gvt2.com', 'beacons5.gvt3.com', 'clients2.google.com',
+ )},
+}
 SITES={s['host']:s for s in json.loads((ROOT/'sites.json').read_text(encoding='utf-8'))['sites']}
 class MockProxy:
  def __init__(self):
@@ -22,10 +35,34 @@ class MockProxy:
   self.mailbox=BrowserMailbox(SITES.values())
   self.logdir=ROOT/'logs';self.logdir.mkdir(exist_ok=True)
   self.logfile=self.logdir/('requests-'+datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')+'.jsonl')
+ def local_hosts(self):
+  hosts={HOST,MAIL_HOST,*SITES,*getattr(self,'captures',{})}
+  for name in ('capture','site'):
+   host=getattr(getattr(self,name,None),'host',None)
+   if host:hosts.add(host.lower())
+  return hosts
+ def allows_upstream(self,request):
+  host=request.host.lower()
+  local_hosts=self.local_hosts()
+  if request.scheme!='https' or request.port!=443 or host in local_hosts:
+   return False
+  # Mock pages cannot send their form data or scripts to live services through
+  # these exceptions. Calls from browser/extension origins remain supported.
+  for header in ('Origin','Referer'):
+   try:source=urlsplit(request.headers.get(header,'')).hostname
+   except ValueError:return False
+   if source and source.lower() in local_hosts:return False
+  if host in AGENT_API_HOSTS:return True
+  if request.headers.get('Upgrade'):return False
+  methods=BROWSER_BACKGROUND_ROUTES.get(host,{}).get(request.path.split('?',1)[0],())
+  return request.method in methods
  def server_connect(self,data):
-  host=(data.server.address[0] if data.server.address else '').lower()
-  if host in AGENT_API_HOSTS:return
-  data.server.error='Research mock: all upstream connections denied'
+  address=data.server.address
+  host=(address[0] if address else '').lower()
+  port=address[1] if address else None
+  if (port==443 and host not in self.local_hosts() and
+      (host in AGENT_API_HOSTS or host in BROWSER_BACKGROUND_ROUTES)):return
+  data.server.error='Research mock: upstream host or port not allowed'
  def requestheaders(self,flow):
   flow.request.stream=False
  def reply(self,flow,status,body=b'',mime='application/json'):
@@ -45,8 +82,8 @@ class MockProxy:
   with self.logfile.open('a',encoding='utf-8') as f:
    f.write(json.dumps(row)+'\n')
  def request(self,flow):
-  if flow.request.host.lower() in AGENT_API_HOSTS and flow.request.port==443:
-   return  # Pass through explicitly allowed AI extension service traffic.
+  if self.allows_upstream(flow.request):
+   return  # Forward the real response; do not fabricate a successful reply.
   try:self.handle(flow)
   except Exception:
    self.reply(flow,500,b'{"error":"local processing failed; upstream denied"}')
@@ -119,3 +156,4 @@ class MockProxy:
     body=('window.MOCK_CONFIG='+json.dumps({'entry':cfg['entry'],'password_path':cfg['password_path'],'waiting_path':cfg['waiting_path']})+';\n').encode()+body
    return self.reply(flow,200,body,'text/javascript; charset=utf-8' if name.endswith('.js') else 'text/html; charset=utf-8')
   self.record_request(flow,'unmapped_blocked');self.reply(flow,403,b'{"blocked":true,"upstream_sent":false}')
+

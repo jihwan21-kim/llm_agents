@@ -62,7 +62,7 @@ class RecordedMockProxy(MockProxy):
         if self.capture.trusted_fixture_js:
             print("TRUSTED SYNTHETIC FIXTURE: one exact-hash, reviewed external "
                   "JavaScript resource is executable; no original backend. "
-                  "All upstream connections remain denied.", flush=True)
+                  "Recorded origins remain local.", flush=True)
         else:
             print("FIDELITY WARNING: this is sanitized static snapshot replay. "
                   "Captured original JS does NOT run; backend effects are not reproduced. "
@@ -478,7 +478,7 @@ async def run(directory=None, preview_dom_settling=False, trusted_fixture_js=Fal
                                   agent_js_inspection=agent_js_inspection,
                                   edit_navigation=edit_navigation)
     master.addons.add(addon)
-    print("Dedicated proxy browser only. All upstream connections are DENIED.", flush=True)
+    print("Dedicated proxy browser only. Recorded origins stay local; listed agent services and browser background endpoints may connect upstream.", flush=True)
     if isinstance(addon, RecordedMockProxy):
         print("Open recorded URL:", addon.capture.start_url, flush=True)
         parts = urlsplit(addon.capture.start_url)
@@ -524,3 +524,4 @@ if __name__ == "__main__":
                         config_path=args.recordings_config))
     except KeyboardInterrupt:
         pass
+

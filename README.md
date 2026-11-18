@@ -1,3 +1,34 @@
+## Browser service requests returning 403
+
+The proxy permits the existing explicit agent-service host list in
+`proxy_app.py`. It also forwards these observed browser background endpoints
+over HTTPS on port 443, with their real upstream responses:
+
+| Host | Path | Methods |
+| --- | --- | --- |
+| `www.google.com` | `/async/folae` | GET, HEAD |
+| `csp.withgoogle.com` | `/csp/report-to/gse_qebhlk` | POST, OPTIONS |
+| `browser-intake-us5-datadoghq.com` | `/api/v2/rum` | POST, OPTIONS |
+| `beacons.gcp.gvt2.com`, `beacons3.gvt2.com`, `beacons4.gvt2.com`, `beacons5.gvt2.com`, `beacons5.gvt3.com`, `clients2.google.com` | `/domainreliability/upload` | POST, OPTIONS |
+
+This does not allow general Google browsing or every subdomain. The proxy
+does not manufacture successful telemetry responses. `claude.ai` remains in
+the existing agent-service list; a 200 from its event logging endpoint is
+already a successful request, not a proxy failure.
+
+Built-in mock hosts, the inbox, the manager, and active recording/fixture
+hosts always take precedence over live service exceptions. Calls carrying a
+mock origin or referrer are also kept off the live services. Other external
+hosts, paths and ports remain blocked. Forwarded service bodies, cookies and
+tokens are not copied into the mock's JSONL request logs.
+
+After `git pull origin main`, stop the old proxy with Ctrl+C and restart your
+usual launcher (`start-mailbox-windows.bat` for the multi-recording inbox, or
+`start-proxy-windows.bat` for built-in mocks). Refresh the dedicated Chrome.
+Only one proxy can listen on port 8080; a running proxy must be restarted to
+load changes to its Python code. End-to-end extension operation still needs
+to be checked on the Windows experiment computer.
+
 ## Live POST capture (explicit opt-in)
 
 The automatic recorder now supports public-site POST-driven navigation:
@@ -138,7 +169,7 @@ Requires Python 3.12 or later and Google Chrome.
 
 Opening these addresses in a regular browser does not route them to the mock. Use the dedicated proxy browser. No hosts-file or DNS changes are required. HTTP mode requires no CA installation.
 
-Agent extensions must be installed separately in the experiment profile. Because the proxy blocks all upstream connections, it may also block a cloud agent extension's model API requests. An external application controlling the browser differs from an extension making its own model API calls. This configuration prioritizes blocking and manual verification; it does not include agent-specific allowlists.
+Agent extensions must be installed separately in the experiment profile. Explicit agent-service hosts and the browser background endpoints listed above may connect upstream; unknown dependencies remain blocked. An external application controlling the browser differs from an extension making its own model API calls. Verify extension operation in the experiment profile before collecting trials.
 
 ## Architecture
 
@@ -146,7 +177,7 @@ Browser → mitmproxy on port 8080 → saved files or local event API
 
 - `proxy_app.py` serves explicitly mapped manager and experiment routes locally.
 - `run_proxy.py` loads the addon before starting the proxy, using lazy connections and `upstream_cert=False`.
-- The `server_connect` hook rejects every upstream server connection, including connections for non-HTTP traffic handled by this proxy.
+- The `server_connect` hook permits only listed service hosts on port 443; the request hook additionally restricts browser background paths and methods. Registered mock/recording hosts never connect upstream.
 - File or request-processing failures return HTTP 500. Unmapped paths and external domains return HTTP 403.
 - A Content Security Policy restricts external resources and connections.
 - `sites/<domain>/` contains mock pages retaining the saved SingleFile CSS. The original submission JavaScript has not been restored.
@@ -341,3 +372,4 @@ This only enables extension installation. An extension may still require externa
 Experiment pages no longer show added local-recording notices, mock alerts, or research tab titles. Coinbase tab titles are restored to `Coinbase` from the supplied captures. Backend event metadata, manager descriptions, provenance, and network blocking remain unchanged. Validation still uses the existing form rules; logging failures do not advance the flow and are reported to the developer console. An evaluator must inspect logs and invalidate recording failures rather than interpreting them as model decisions.
 
 A clean screen does not establish original behavioral equivalence. Original scripts/backends are unavailable. Job and points submissions remain on their last supplied screen; unsupported external actions remain blocked without a new notification. No unseen authentication success, points response, or external page is invented. DOM/source/network inspection can still reveal replay infrastructure; this change only removes added visible UI notices.
+
