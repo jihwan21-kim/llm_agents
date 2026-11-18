@@ -2,6 +2,10 @@
 
 The proxy permits the explicit agent-service host list in `proxy_app.py`,
 including `chatgpt.com` for the browser side-chat page and auth/API requests.
+`ws.chatgpt.com` is also allowed on port 443 for ChatGPT's secure WebSocket
+connection. The proxy preserves the upgrade headers, cookies and verification
+query, then forwards the actual handshake response and subsequent traffic.
+See the [official WebSocket network requirements](https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps).
 It also forwards these observed browser background endpoints
 over HTTPS on port 443, with their real upstream responses:
 
@@ -56,7 +60,7 @@ path/query, request body, authentication header or cookie.
 
 ### Verify the running proxy, not just the checked-out files
 
-This network policy revision is **`2026-11-18.4`**. It is printed together with
+This network policy revision is **`2026-11-18.5`**. It is printed together with
 the code directory when any mock proxy starts. In the dedicated proxy Chrome,
 open:
 

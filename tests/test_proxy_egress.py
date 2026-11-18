@@ -162,6 +162,53 @@ class ProxyEgressTests(unittest.TestCase):
                 self.assertIsNone(self.connect(self.proxy, "chatgpt.com"))
         self.assertFalse(self.proxy.logfile.exists())
 
+    def test_chatgpt_websocket_handshake_is_forwarded_without_header_or_token_changes(self):
+        flow = flow_for(
+            "https://ws.chatgpt.com/p0/ws/user/synthetic-user?verify=synthetic-verification",
+            headers={
+                "Origin": "https://chatgpt.com",
+                "Connection": "Upgrade", "Upgrade": "websocket",
+                "Sec-WebSocket-Version": "13",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                "Cookie": "synthetic-session=test-only",
+            })
+        headers = dict(flow.request.headers)
+        path = flow.request.path
+        self.proxy.requestheaders(flow)
+        self.proxy.request(flow)
+        self.assertIsNone(flow.response)
+        self.assertIsNone(self.connect(self.proxy, "ws.chatgpt.com"))
+        self.assertEqual(dict(flow.request.headers), headers)
+        self.assertEqual(flow.request.path, path)
+        self.assertFalse(self.proxy.logfile.exists())
+        self.assertEqual(self.proxy.network_status()["blocked_service_requests"], [])
+
+    def test_chatgpt_websocket_stays_blocked_for_mock_origins_and_recorded_hosts(self):
+        url = "https://ws.chatgpt.com/p0/ws/user/synthetic-user?verify=synthetic-verification"
+        for header in ("Origin", "Referer"):
+            with self.subTest(header=header):
+                flow = flow_for(url, headers={"Upgrade": "websocket",
+                                             header: "https://298101binance.com/"})
+                self.proxy.request(flow)
+                self.assertEqual(flow.response.status_code, 403)
+        self.proxy.capture = types.SimpleNamespace(host="ws.chatgpt.com")
+        flow = flow_for(url, headers={"Upgrade": "websocket", "Origin": "https://chatgpt.com"})
+        self.proxy.request(flow)
+        self.assertEqual(flow.response.status_code, 403)
+        self.assertIsNotNone(self.connect(self.proxy, "ws.chatgpt.com"))
+
+    def test_chatgpt_websocket_does_not_allow_lookalike_hosts_or_other_ports(self):
+        for url in (
+            "https://ws.chatgpt.com.attacker.test/p0/ws/user/synthetic-user",
+            "https://ws.chatgpt.com:8443/p0/ws/user/synthetic-user",
+            "http://ws.chatgpt.com/p0/ws/user/synthetic-user",
+        ):
+            with self.subTest(url=url):
+                flow = flow_for(url, headers={"Upgrade": "websocket"})
+                self.proxy.request(flow)
+                self.assertEqual(flow.response.status_code, 403)
+                self.assertIsNotNone(self.connect(self.proxy, flow.request.host, flow.request.port))
+
     def test_google_signin_sequence_passes_without_modifying_or_logging_tokens(self):
         for method, url in GOOGLE_SIGNIN_REQUESTS:
             with self.subTest(method=method, url=url):
@@ -268,7 +315,7 @@ class ProxyEgressTests(unittest.TestCase):
         self.proxy.request(status)
         self.assertEqual(status.response.status_code, 200)
         data = json.loads(status.response.content)
-        self.assertEqual(data["policy_revision"], "2026-11-18.4")
+        self.assertEqual(data["policy_revision"], "2026-11-18.5")
         self.assertEqual(data["mode"], "MockProxy")
         self.assertEqual(data["code_directory"], str(Path(__file__).resolve().parents[1]))
         self.assertEqual(len(data["blocked_service_requests"]), 1)
@@ -404,7 +451,7 @@ class ProxyEgressTests(unittest.TestCase):
         status = flow_for("http://mock.test/__mock/proxy-status")
         proxy.request(status)
         self.assertEqual(status.response.status_code, 200)
-        self.assertEqual(json.loads(status.response.content)["policy_revision"], "2026-11-18.4")
+        self.assertEqual(json.loads(status.response.content)["policy_revision"], "2026-11-18.5")
         proxy.handle = mock.Mock()
         flow = flow_for(OBSERVED_REQUESTS[2][1], "POST", {"Origin": "https://" + host})
         proxy.request(flow)

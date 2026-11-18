@@ -8,10 +8,11 @@ from mitmproxy import http
 from browser_mail import MAIL_HOST, MAIL_URL, BrowserMailbox, serve_static
 ROOT=Path(__file__).resolve().parent
 HOST='mock.test'
-NETWORK_POLICY_REVISION='2026-11-18.4'
+NETWORK_POLICY_REVISION='2026-11-18.5'
 # Explicit service allowlist, not a wildcard for all Google-owned domains.
 AGENT_API_HOSTS={
- 'api.openai.com', 'cdn.platform.openai.com', 'chatgpt.com', 'api.anthropic.com',
+ 'api.openai.com', 'cdn.platform.openai.com', 'chatgpt.com', 'ws.chatgpt.com',
+ 'api.anthropic.com',
  'claude.ai', 'platform.claude.com', 's-cdn.anthropic.com',
  'assets-proxy.anthropic.com', 'bridge.claudeusercontent.com',
  'accounts.google.com', 'oauth2.googleapis.com', 'www.googleapis.com',
