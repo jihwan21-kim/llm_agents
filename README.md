@@ -1,12 +1,16 @@
 ## Browser service requests returning 403
 
-The proxy permits the existing explicit agent-service host list in
-`proxy_app.py`. It also forwards these observed browser background endpoints
+The proxy permits the explicit agent-service host list in `proxy_app.py`,
+including `chatgpt.com` for the browser side-chat page and auth/API requests.
+It also forwards these observed browser background endpoints
 over HTTPS on port 443, with their real upstream responses:
 
 | Host | Path | Methods |
 | --- | --- | --- |
 | `www.google.com` | `/async/folae` | GET, HEAD |
+| `update.googleapis.com` | `/service/update2/json` | POST, OPTIONS |
+| `ab.chatgpt.com` | `/v1/rgstr`, `/v1/sdk_exception` | POST, OPTIONS |
+| `o33249.ingest.us.sentry.io` | `/api/4512228274601984/envelope/` | POST, OPTIONS |
 | `csp.withgoogle.com` | `/csp/report-to/gse_qebhlk` | POST, OPTIONS |
 | `browser-intake-us5-datadoghq.com` | `/api/v2/rum` | POST, OPTIONS |
 | `beacons.gcp.gvt2.com`, `beacons3.gvt2.com`, `beacons4.gvt2.com`, `beacons5.gvt2.com`, `beacons5.gvt3.com`, `clients2.google.com` | `/domainreliability/upload` | POST, OPTIONS |
@@ -28,6 +32,10 @@ usual launcher (`start-mailbox-windows.bat` for the multi-recording inbox, or
 Only one proxy can listen on port 8080; a running proxy must be restarted to
 load changes to its Python code. End-to-end extension operation still needs
 to be checked on the Windows experiment computer.
+
+For the built-in site list and submission viewer, run
+`start-proxy-windows.bat` and then, in another PowerShell window,
+`open-chrome-windows.bat --manager`. This opens `http://mock.test/` directly.
 
 ## Live POST capture (explicit opt-in)
 

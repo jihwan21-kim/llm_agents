@@ -9,7 +9,7 @@ ROOT=Path(__file__).resolve().parent
 HOST='mock.test'
 # Explicit service allowlist, not a wildcard for all Google-owned domains.
 AGENT_API_HOSTS={
- 'api.openai.com', 'cdn.platform.openai.com', 'api.anthropic.com',
+ 'api.openai.com', 'cdn.platform.openai.com', 'chatgpt.com', 'api.anthropic.com',
  'claude.ai', 'platform.claude.com', 's-cdn.anthropic.com',
  'assets-proxy.anthropic.com', 'bridge.claudeusercontent.com',
  'accounts.google.com', 'oauth2.googleapis.com', 'www.googleapis.com',
@@ -20,6 +20,11 @@ AGENT_API_HOSTS={
 _REPORT_METHODS=frozenset({'POST','OPTIONS'})
 BROWSER_BACKGROUND_ROUTES={
  'www.google.com': {'/async/folae': frozenset({'GET','HEAD'})},
+ 'update.googleapis.com': {'/service/update2/json': _REPORT_METHODS},
+ 'ab.chatgpt.com': {'/v1/rgstr': _REPORT_METHODS,
+                    '/v1/sdk_exception': _REPORT_METHODS},
+ 'o33249.ingest.us.sentry.io': {
+  '/api/4512228274601984/envelope/': _REPORT_METHODS},
  'csp.withgoogle.com': {'/csp/report-to/gse_qebhlk': _REPORT_METHODS},
  'browser-intake-us5-datadoghq.com': {'/api/v2/rum': _REPORT_METHODS},
  **{host: {'/domainreliability/upload': _REPORT_METHODS} for host in (

@@ -50,6 +50,10 @@ OBSERVED_REQUESTS = (
     ("POST", "https://beacons5.gvt2.com/domainreliability/upload"),
     ("POST", "https://beacons3.gvt2.com/domainreliability/upload"),
     ("POST", "https://beacons4.gvt2.com/domainreliability/upload"),
+    ("POST", "https://update.googleapis.com/service/update2/json?cup2key=synthetic-test"),
+    ("POST", "https://ab.chatgpt.com/v1/rgstr?k=synthetic-test&st=javascript"),
+    ("POST", "https://ab.chatgpt.com/v1/sdk_exception"),
+    ("POST", "https://o33249.ingest.us.sentry.io/api/4512228274601984/envelope/?sentry_version=7&sentry_key=synthetic-test"),
 )
 
 
@@ -117,6 +121,15 @@ class ProxyEgressTests(unittest.TestCase):
                 self.assertIsNone(flow.response)
         self.assertFalse(self.proxy.logfile.exists())
 
+    def test_chatgpt_session_and_browser_side_chat_are_forwarded(self):
+        for path in ("/api/auth/session", "/?surface=browser_side_chat"):
+            with self.subTest(path=path):
+                flow = flow_for("https://chatgpt.com" + path)
+                self.proxy.request(flow)
+                self.assertIsNone(flow.response)
+                self.assertIsNone(self.connect(self.proxy, "chatgpt.com"))
+        self.assertFalse(self.proxy.logfile.exists())
+
     def test_allowed_hosts_do_not_allow_unrelated_paths_or_writes(self):
         cases = (
             ("GET", "https://www.google.com/search?q=test"),
@@ -125,6 +138,11 @@ class ProxyEgressTests(unittest.TestCase):
             ("GET", "https://clients2.google.com/domainreliability/upload"),
             ("DELETE", "https://browser-intake-us5-datadoghq.com/api/v2/rum"),
             ("POST", "https://beacons5.gvt3.com/domainreliability/upload/extra"),
+            ("GET", "https://update.googleapis.com/service/update2/json"),
+            ("POST", "https://update.googleapis.com/service/update2/other"),
+            ("POST", "https://ab.chatgpt.com/v1/other"),
+            ("GET", "https://ab.chatgpt.com/v1/rgstr"),
+            ("POST", "https://o33249.ingest.us.sentry.io/api/other/envelope/"),
         )
         for method, url in cases:
             with self.subTest(method=method, url=url):
@@ -135,7 +153,8 @@ class ProxyEgressTests(unittest.TestCase):
     def test_other_hosts_and_hostname_lookalikes_remain_blocked(self):
         for host in ("outside.invalid", "www.google.com.attacker.test",
                      "clients2.google.com.attacker.test", "beacons5.gvt3.com.attacker.test",
-                     "unlisted.gvt2.com"):
+                     "unlisted.gvt2.com", "chatgpt.com.attacker.test",
+                     "update.googleapis.com.attacker.test", "ab.chatgpt.com.attacker.test"):
             with self.subTest(host=host):
                 flow = flow_for("https://" + host + "/domainreliability/upload", "POST")
                 self.proxy.request(flow)
@@ -161,7 +180,9 @@ class ProxyEgressTests(unittest.TestCase):
     def test_mock_origins_and_referrers_cannot_use_service_exceptions(self):
         for header in ("Origin", "Referer"):
             for host in ("mock.test", "inbox.cedarpostmail.net", "298101binance.com"):
-                for url in (OBSERVED_REQUESTS[2][1], "https://api.anthropic.com/v1/messages"):
+                for url in (OBSERVED_REQUESTS[2][1], "https://api.anthropic.com/v1/messages",
+                            "https://chatgpt.com/api/auth/session",
+                            "https://update.googleapis.com/service/update2/json"):
                     with self.subTest(header=header, host=host, url=url):
                         flow = flow_for(url, "POST", {header: "https://" + host + "/"})
                         self.proxy.request(flow)
@@ -205,7 +226,9 @@ class ProxyEgressTests(unittest.TestCase):
 
     def test_single_recording_wins_over_google_and_agent_live_exceptions(self):
         for host, path in (("www.google.com", "/async/folae"),
-                           ("claude.ai", "/api/event_logging/v2/batch")):
+                           ("claude.ai", "/api/event_logging/v2/batch"),
+                           ("chatgpt.com", "/api/auth/session"),
+                           ("update.googleapis.com", "/service/update2/json")):
             with self.subTest(host=host), contextlib.redirect_stdout(io.StringIO()):
                 folder = self.make_recording(host, path)
                 proxy = self.recording_proxy.RecordedMockProxy(folder)
@@ -213,7 +236,9 @@ class ProxyEgressTests(unittest.TestCase):
 
     def test_mailbox_recording_wins_over_google_and_agent_live_exceptions(self):
         for host, path in (("www.google.com", "/async/folae"),
-                           ("claude.ai", "/api/event_logging/v2/batch")):
+                           ("claude.ai", "/api/event_logging/v2/batch"),
+                           ("chatgpt.com", "/api/auth/session"),
+                           ("update.googleapis.com", "/service/update2/json")):
             with self.subTest(host=host), contextlib.redirect_stdout(io.StringIO()):
                 folder = self.make_recording(host, path)
                 with mock.patch.object(self.recording_proxy, "load_recording_directories",
