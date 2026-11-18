@@ -15,19 +15,26 @@ AGENT_API_HOSTS={
  'accounts.google.com', 'oauth2.googleapis.com', 'www.googleapis.com',
  'ssl.gstatic.com', 'www.gstatic.com', 'translate.googleapis.com',
 }
-# Exact background endpoints observed in the experiment browser. Reporting
-# hosts are not general-purpose live browsing exceptions.
-_REPORT_METHODS=frozenset({'POST','OPTIONS'})
+# Explicit browser auth/background endpoints; these hosts are not
+# general-purpose live browsing exceptions.
+_READ_METHODS=frozenset({'GET','HEAD'})
+_POST_METHODS=frozenset({'POST','OPTIONS'})
 BROWSER_BACKGROUND_ROUTES={
- 'www.google.com': {'/async/folae': frozenset({'GET','HEAD'})},
- 'update.googleapis.com': {'/service/update2/json': _REPORT_METHODS},
- 'ab.chatgpt.com': {'/v1/rgstr': _REPORT_METHODS,
-                    '/v1/sdk_exception': _REPORT_METHODS},
+ # Chrome's token minting and device-bound session discovery use different
+ # hosts from accounts.google.com. Both must pass for the sign-in flow.
+ 'oauthaccountmanager.googleapis.com': {'/v1/issuetoken': _POST_METHODS,
+                                       '/v1/upgradetoken': _POST_METHODS},
+ 'google.com': {'/.well-known/device-bound-sessions': _READ_METHODS},
+ 'www.google.com': {'/async/folae': _READ_METHODS,
+                    '/.well-known/device-bound-sessions': _READ_METHODS},
+ 'update.googleapis.com': {'/service/update2/json': _POST_METHODS},
+ 'ab.chatgpt.com': {'/v1/rgstr': _POST_METHODS,
+                    '/v1/sdk_exception': _POST_METHODS},
  'o33249.ingest.us.sentry.io': {
-  '/api/4512228274601984/envelope/': _REPORT_METHODS},
- 'csp.withgoogle.com': {'/csp/report-to/gse_qebhlk': _REPORT_METHODS},
- 'browser-intake-us5-datadoghq.com': {'/api/v2/rum': _REPORT_METHODS},
- **{host: {'/domainreliability/upload': _REPORT_METHODS} for host in (
+  '/api/4512228274601984/envelope/': _POST_METHODS},
+ 'csp.withgoogle.com': {'/csp/report-to/gse_qebhlk': _POST_METHODS},
+ 'browser-intake-us5-datadoghq.com': {'/api/v2/rum': _POST_METHODS},
+ **{host: {'/domainreliability/upload': _POST_METHODS} for host in (
   'beacons.gcp.gvt2.com', 'beacons3.gvt2.com', 'beacons4.gvt2.com',
   'beacons5.gvt2.com', 'beacons5.gvt3.com', 'clients2.google.com',
  )},

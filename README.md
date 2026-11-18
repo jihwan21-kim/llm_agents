@@ -8,6 +8,8 @@ over HTTPS on port 443, with their real upstream responses:
 | Host | Path | Methods |
 | --- | --- | --- |
 | `www.google.com` | `/async/folae` | GET, HEAD |
+| `oauthaccountmanager.googleapis.com` | `/v1/issuetoken`, `/v1/upgradetoken` | POST, OPTIONS |
+| `google.com`, `www.google.com` | `/.well-known/device-bound-sessions` | GET, HEAD |
 | `update.googleapis.com` | `/service/update2/json` | POST, OPTIONS |
 | `ab.chatgpt.com` | `/v1/rgstr`, `/v1/sdk_exception` | POST, OPTIONS |
 | `o33249.ingest.us.sentry.io` | `/api/4512228274601984/envelope/` | POST, OPTIONS |
@@ -19,6 +21,14 @@ This does not allow general Google browsing or every subdomain. The proxy
 does not manufacture successful telemetry responses. `claude.ai` remains in
 the existing agent-service list; a 200 from its event logging endpoint is
 already a successful request, not a proxy failure.
+
+Google sign-in also calls the separate OAuth account-manager host and the
+device-bound session discovery URL above. Allowing `accounts.google.com`
+alone is insufficient. The token issue/upgrade endpoints are documented in
+[Chromium's Gaia URL tests](https://chromium.googlesource.com/chromium/src.git/+/refs/heads/main/google_apis/gaia/gaia_urls_unittest.cc).
+Regression tests replay the reported request sequence with synthetic tokens,
+checking forwarding, header/body preservation and absence from local logs.
+They verify proxy routing, not successful authentication to a real account.
 
 Built-in mock hosts, the inbox, the manager, and active recording/fixture
 hosts always take precedence over live service exceptions. Calls carrying a

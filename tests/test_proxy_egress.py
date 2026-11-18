@@ -56,6 +56,19 @@ OBSERVED_REQUESTS = (
     ("POST", "https://o33249.ingest.us.sentry.io/api/4512228274601984/envelope/?sentry_version=7&sentry_key=synthetic-test"),
 )
 
+# Chrome sign-in dependencies from the reported flow, plus the paired token
+# upgrade endpoint and www discovery variant. No real tokens are used.
+GOOGLE_SIGNIN_REQUESTS = (
+    ("POST", "https://www.googleapis.com/oauth2/v4/token"),
+    ("POST", "https://accounts.google.com/RegisterSession"),
+    ("POST", "https://oauthaccountmanager.googleapis.com/v1/issuetoken"),
+    ("POST", "https://oauthaccountmanager.googleapis.com/v1/upgradetoken"),
+    ("GET", "https://google.com/.well-known/device-bound-sessions"),
+    ("GET", "https://www.google.com/.well-known/device-bound-sessions"),
+    ("POST", "https://accounts.google.com/ListAccounts?source=ChromiumBrowser"),
+    ("GET", "https://accounts.google.com/RotateBoundCookies"),
+)
+
 
 class ProxyEgressTests(unittest.TestCase):
     @classmethod
@@ -130,6 +143,31 @@ class ProxyEgressTests(unittest.TestCase):
                 self.assertIsNone(self.connect(self.proxy, "chatgpt.com"))
         self.assertFalse(self.proxy.logfile.exists())
 
+    def test_google_signin_sequence_passes_without_modifying_or_logging_tokens(self):
+        for method, url in GOOGLE_SIGNIN_REQUESTS:
+            with self.subTest(method=method, url=url):
+                flow = flow_for(url, method, {
+                    "Origin": "https://accounts.google.com",
+                    "Authorization": "Bearer synthetic-test-token",
+                    "Cookie": "synthetic-session=test-only",
+                })
+                before_headers = dict(flow.request.headers)
+                before_body = flow.request.raw_content
+                self.proxy.request(flow)
+                self.assertIsNone(flow.response)
+                self.assertIsNone(self.connect(self.proxy, flow.request.host))
+                self.assertEqual(dict(flow.request.headers), before_headers)
+                self.assertEqual(flow.request.raw_content, before_body)
+        self.assertFalse(self.proxy.logfile.exists())
+
+    def test_google_signin_exceptions_reject_mock_origins_and_referrers(self):
+        for method, url in GOOGLE_SIGNIN_REQUESTS:
+            for header in ("Origin", "Referer"):
+                with self.subTest(method=method, url=url, header=header):
+                    flow = flow_for(url, method, {header: "https://298101binance.com/"})
+                    self.proxy.request(flow)
+                    self.assertEqual(flow.response.status_code, 403)
+
     def test_allowed_hosts_do_not_allow_unrelated_paths_or_writes(self):
         cases = (
             ("GET", "https://www.google.com/search?q=test"),
@@ -143,6 +181,12 @@ class ProxyEgressTests(unittest.TestCase):
             ("POST", "https://ab.chatgpt.com/v1/other"),
             ("GET", "https://ab.chatgpt.com/v1/rgstr"),
             ("POST", "https://o33249.ingest.us.sentry.io/api/other/envelope/"),
+            ("GET", "https://oauthaccountmanager.googleapis.com/v1/issuetoken"),
+            ("POST", "https://oauthaccountmanager.googleapis.com/v1/issuetoken/extra"),
+            ("POST", "https://oauthaccountmanager.googleapis.com/v1/other"),
+            ("GET", "https://google.com/"),
+            ("POST", "https://google.com/.well-known/device-bound-sessions"),
+            ("GET", "https://google.com/.well-known/device-bound-sessions/extra"),
         )
         for method, url in cases:
             with self.subTest(method=method, url=url):
@@ -154,7 +198,8 @@ class ProxyEgressTests(unittest.TestCase):
         for host in ("outside.invalid", "www.google.com.attacker.test",
                      "clients2.google.com.attacker.test", "beacons5.gvt3.com.attacker.test",
                      "unlisted.gvt2.com", "chatgpt.com.attacker.test",
-                     "update.googleapis.com.attacker.test", "ab.chatgpt.com.attacker.test"):
+                     "update.googleapis.com.attacker.test", "ab.chatgpt.com.attacker.test",
+                     "oauthaccountmanager.googleapis.com.attacker.test", "google.com.attacker.test"):
             with self.subTest(host=host):
                 flow = flow_for("https://" + host + "/domainreliability/upload", "POST")
                 self.proxy.request(flow)
@@ -228,7 +273,9 @@ class ProxyEgressTests(unittest.TestCase):
         for host, path in (("www.google.com", "/async/folae"),
                            ("claude.ai", "/api/event_logging/v2/batch"),
                            ("chatgpt.com", "/api/auth/session"),
-                           ("update.googleapis.com", "/service/update2/json")):
+                           ("update.googleapis.com", "/service/update2/json"),
+                           ("google.com", "/.well-known/device-bound-sessions"),
+                           ("oauthaccountmanager.googleapis.com", "/v1/issuetoken")):
             with self.subTest(host=host), contextlib.redirect_stdout(io.StringIO()):
                 folder = self.make_recording(host, path)
                 proxy = self.recording_proxy.RecordedMockProxy(folder)
@@ -238,7 +285,9 @@ class ProxyEgressTests(unittest.TestCase):
         for host, path in (("www.google.com", "/async/folae"),
                            ("claude.ai", "/api/event_logging/v2/batch"),
                            ("chatgpt.com", "/api/auth/session"),
-                           ("update.googleapis.com", "/service/update2/json")):
+                           ("update.googleapis.com", "/service/update2/json"),
+                           ("google.com", "/.well-known/device-bound-sessions"),
+                           ("oauthaccountmanager.googleapis.com", "/v1/issuetoken")):
             with self.subTest(host=host), contextlib.redirect_stdout(io.StringIO()):
                 folder = self.make_recording(host, path)
                 with mock.patch.object(self.recording_proxy, "load_recording_directories",
