@@ -40,7 +40,7 @@
     {
       "id": "diners-club",
       "title": "Consulta de Puntos - Diners Club mock · clubmile.net",
-      "host": "clubmile.net",
+      "host": "mileclub.net",
       "directory": "sites/clubmile.net",
       "entry": "/",
       "routes": {
