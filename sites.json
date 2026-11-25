@@ -3,7 +3,7 @@
     {
       "id": "coinbase-298101",
       "title": "Coinbase mock · 298101binance.com",
-      "host": "298101binance.com",
+      "host": "29binance.com",
       "directory": "sites/298101binance.com",
       "entry": "/",
       "password_path": "/c/password",
@@ -18,7 +18,7 @@
     {
       "id": "viva-sorte",
       "title": "Viva Sorte raffle mock · realizafimdeano1.vercel.app",
-      "host": "realizafimdeano1.vercel.app",
+      "host": "realizafimdeano1.com",
       "directory": "sites/realizafimdeano1.vercel.app",
       "entry": "/",
       "routes": {
@@ -29,7 +29,7 @@
     {
       "id": "legoohiring",
       "title": "Find the right job type for you mock · legoohiring.vercel.app",
-      "host": "legoohiring.vercel.app",
+      "host": "legoohiring.com",
       "directory": "sites/legoohiring.vercel.app",
       "entry": "/",
       "routes": {
